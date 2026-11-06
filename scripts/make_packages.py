@@ -4,11 +4,11 @@
   Mirrorway-<version>-windows.zip   install-windows.bat/.ps1 + the code
 
 Usage: python scripts/make_packages.py --app build/Mirrorway.app --out dist
-Each zip holds one folder (Mirrorway-<version>-mac/ or …-windows/); file modes are kept (the launcher and the
-.command files stay executable), dates are fixed so the same input gives the same zip.
+Each zip holds one folder (Mirrorway-<version>-mac/ or …-windows/). The launcher, start.sh and the .command files
+are marked executable by name (so building on any platform gives the same modes); dates are fixed, so the same
+input gives the same zip.
 """
 import argparse
-import os
 import sys
 import zipfile
 from pathlib import Path
@@ -24,6 +24,14 @@ MAC_FILES = COMMON + ("install-mac.command", "run-mac.command", "requirements-ma
 WIN_FILES = COMMON + ("install-windows.bat", "install-windows.ps1", "run-windows.bat", "debug-windows.bat",
                       "requirements-windows.txt")
 FIXED_DATE = (2020, 1, 1, 0, 0, 0)
+EXECUTABLES = ("install-mac.command", "run-mac.command")
+
+
+def _executable(arc: str) -> bool:
+    """Which files get mode 755, by name (the same on every platform, Windows included)."""
+    name = arc.split("/", 1)[1]
+    return (name in EXECUTABLES or name.startswith("Mirrorway.app/Contents/MacOS/")
+            or (name.startswith("Mirrorway.app/") and name.endswith(".sh")))
 
 
 def mac_name(version: str) -> str:
@@ -40,7 +48,7 @@ def _code_files():
 
 
 def _add(z: zipfile.ZipFile, arc: str, path: Path) -> None:
-    mode = 0o755 if os.access(path, os.X_OK) else 0o644
+    mode = 0o755 if _executable(arc) else 0o644
     zi = zipfile.ZipInfo(arc, date_time=FIXED_DATE)
     zi.compress_type = zipfile.ZIP_DEFLATED
     zi.create_system = 3                                   # Unix: external_attr carries the file mode
