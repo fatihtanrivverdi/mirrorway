@@ -59,17 +59,14 @@ Mirrorway starts by itself when you log in; turn this off with **Mirrorway › O
 
 ## 2. Installing on Windows
 
-1. Download **`Mirrorway-<version>-windows.zip`** from the [latest release](https://github.com/fatihtanrivverdi/mirrorway/releases/latest), right-click it and choose **Extract All**.
-2. Double-click **`install-windows.bat`**. If Windows shows "Windows protected your PC", click **More info › Run anyway**. The installer:
-   - installs Python if it is missing (winget first, python.org otherwise),
-   - copies the app to `%LOCALAPPDATA%\Mirrorway` and installs the packages,
-   - adds **Mirrorway** shortcuts to the Start menu and the desktop and starts Mirrorway with Windows,
-   - asks for a firewall rule so the Mac can be found automatically (answer Yes),
-   - starts Mirrorway and checks whether it can reach the Mac.
-3. If this PC is not paired yet, the settings window opens. On the Mac choose **Mirrorway › Pair a New Device…**, type the 6-digit code and click **Save and Connect**. Pairing is done once; after that, connections are made automatically.
-4. The colour of the tray icon next to the clock shows the state: **violet** = connected, **teal** = the Mac's keyboard and mouse are on this PC right now, **grey** = not connected, **red** = error (usually a wrong code).
+1. Download **`Mirrorway-<version>-windows-setup.exe`** from the [latest release](https://github.com/fatihtanrivverdi/mirrorway/releases/latest) and double-click it. The first time Windows may show "Windows protected your PC" (the installer is not signed): click **More info › Run anyway**.
+2. That is all: the installer asks no questions. It installs Mirrorway with its own Python to `%LOCALAPPDATA%\Mirrorway` (no administrator rights, no separate Python), adds **Mirrorway** to the Start menu, the desktop and Windows startup, replaces an earlier Mirrorway or Köprü, and starts Mirrorway. Once, it asks for administrator permission for a firewall rule so the Mac is found automatically; saying No is fine (the Mac's address can be typed in Settings).
+3. If this PC is not paired yet, the Settings window opens. On the Mac choose **Pair a New Device…** in the Mirrorway panel and type the 6-digit code. Pairing is done once; after that, connections are made automatically.
+4. Click the Mirrorway icon in the tray (next to the clock; Windows may put it under **^** at first) to open the panel. The icon's colour shows the state: **violet** = connected, **teal** = the Mac's keyboard and mouse are on this PC right now, **grey** = not connected, **red** = error.
 
-> To uninstall: delete the **Mirrorway** shortcuts from the Start menu, the desktop and the `shell:startup` folder, and the `%LOCALAPPDATA%\Mirrorway` folder.
+Later versions arrive by themselves: the Mac sends them to Windows when it connects. To uninstall, use **Settings › Apps › Installed apps › Mirrorway › Uninstall**; the settings in `%USERPROFILE%\.mirrorway` stay.
+
+> The older zip package (`Mirrorway-<version>-windows.zip` with `install-windows.bat`) is still published; it uses a Python installed on the PC.
 
 ### Moving over from Köprü
 
@@ -281,6 +278,7 @@ mirrorway/
                            viewer.py, app.py (Tk + pystray), panel.py (tray panel), settings.py (Settings window),
                            hotkeys.py (Ctrl+Alt shortcuts), startup.py (start with Windows)
 macapp/                    Mirrorway.app launcher (launcher.c), start.sh, build_app.py, icon
+wininstaller/              the Windows installer (Inno Setup script; built by scripts/build_windows_installer.py)
 assets/                    logo
 scripts/                   release and packaging scripts
 tests/                     unit and end-to-end tests (the Mac and Windows APIs are faked)

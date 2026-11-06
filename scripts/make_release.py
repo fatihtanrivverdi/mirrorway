@@ -16,6 +16,15 @@ from mirrorway import __version__  # noqa: E402
 from mirrorway import release as R  # noqa: E402
 
 
+def download_notes(version: str) -> str:
+    return (f"**Windows:** download `Mirrorway-{version}-windows-setup.exe` and double-click it; it installs and "
+            "starts Mirrorway (no Python needed). The first time Windows may say \"Windows protected your PC\": "
+            "click **More info › Run anyway**.\n\n"
+            f"**Mac:** download `Mirrorway-{version}-mac.zip`, open it and run `install-mac.command` "
+            "(see the README).\n\n"
+            "Installed copies update themselves: the Mac from here, Windows from the Mac.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", required=True)
@@ -46,7 +55,8 @@ def main() -> int:
     (out / R.zip_name(version)).write_bytes(data)
     (out / R.manifest_name(version)).write_bytes(manifest)
     (out / R.sig_name(version)).write_text(sig + "\n", encoding="ascii")
-    (out / "notes.md").write_text(notes or f"Mirrorway {version}", encoding="utf-8")
+    (out / "notes.md").write_text(download_notes(version) + "\n\n" + (notes or f"Mirrorway {version}"),
+                                  encoding="utf-8")
     print(f"Mirrorway {version}: {len(data)} bytes, sha256 {m['sha256']}")
     return 0
 

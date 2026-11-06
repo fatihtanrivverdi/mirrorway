@@ -56,13 +56,15 @@ def main() -> int:
     upload = rel["upload_url"].split("{", 1)[0]
     # the signed update package (read by the app's updater) and the download packages for people
     names = [f"mirrorway-app-{version}.zip", f"mirrorway-{version}.json", f"mirrorway-{version}.json.sig",
-             f"Mirrorway-{version}-mac.zip", f"Mirrorway-{version}-windows.zip"]
+             f"Mirrorway-{version}-mac.zip", f"Mirrorway-{version}-windows.zip",
+             f"Mirrorway-{version}-windows-setup.exe"]
     for name in names:
         if name in have:
             print(f"already there: {name}")
             continue
         data = (d / name).read_bytes()
-        ctype = "application/zip" if name.endswith(".zip") else "application/octet-stream"
+        ctype = {".zip": "application/zip", ".exe": "application/vnd.microsoft.portable-executable"}.get(
+            Path(name).suffix, "application/octet-stream")
         st, res = call("POST", f"{upload}?name={urllib.parse.quote(name)}", token, data, ctype)
         if st not in (200, 201):
             print(f"Could not upload {name}: {st} {res.get('message')}", file=sys.stderr)

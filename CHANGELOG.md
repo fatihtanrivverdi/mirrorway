@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.1.5 — one-click installer for Windows
+- **`Mirrorway-3.1.5-windows-setup.exe`:** double-click and Mirrorway is installed and running; no questions, no
+  separate Python (it brings its own, with the pinned packages), no administrator rights (only the optional
+  firewall rule asks). It replaces an earlier Mirrorway or Köprü, keeps the settings and pairing, and can be
+  removed from Windows' Installed apps.
+- An update keeps your choices: a deleted desktop shortcut or a turned-off start with Windows stay that way.
+- CI builds the installer on real Windows and tries it every release: install, start (Mirrorway must keep running),
+  install again over a running Mirrorway, uninstall.
+
 ## 3.1.4 — fix: Mirrorway on Windows closed right after starting
 - The Language submenu of the tray icon made pystray refuse the menu, so the Windows app ended at once (since 3.0).
   The CI's stand-in for pystray now checks menu actions the same way.

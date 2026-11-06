@@ -90,12 +90,17 @@ def test_download_packages(app, tmp_path):
 def test_publish_uploads_download_packages():
     text = (ROOT / "scripts" / "publish_release.py").read_text(encoding="utf-8")
     assert 'f"Mirrorway-{version}-mac.zip"' in text and 'f"Mirrorway-{version}-windows.zip"' in text
+    assert 'f"Mirrorway-{version}-windows-setup.exe"' in text
     wf = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     mac_job = wf.split("\n  macos:", 1)[1].split("\n  windows:", 1)[0]
     assert "macapp/build_app.py build" in mac_job and "make_packages.py --app build/Mirrorway.app" in mac_job
     assert "codesign --verify" in mac_job and "name: packages" in mac_job
+    win_job = wf.split("\n  windows:", 1)[1].split("\n  release:", 1)[0]
+    assert win_job.index("build_windows_installer.py") < win_job.index("ci_installer_windows.py") \
+        < win_job.index("name: packages-windows")
     rel = wf.split("\n  release:", 1)[1].split("\n  report:", 1)[0]
     assert rel.index("download-artifact") < rel.index("make_release.py") < rel.index("publish_release.py")
+    assert "pattern: packages*" in rel and "merge-multiple: true" in rel
 
 
 def test_mac_menu_bar_uses_the_logo():
