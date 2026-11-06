@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import posixpath
 import shutil
 import subprocess
 import sys
@@ -74,7 +75,7 @@ def _extract_python(archive: Path, res: Path) -> None:
 
 
 def _link_inside(m: tarfile.TarInfo) -> bool:
-    target = os.path.normpath(os.path.join(os.path.dirname(m.name), m.linkname))
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(m.name), m.linkname))   # tar paths use /
     return target == "python" or target.startswith("python/")
 
 

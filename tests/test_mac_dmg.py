@@ -41,6 +41,7 @@ def _fake_app(tmp: Path) -> Path:
     return app
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="the disk image is built on macOS (the archive has symlinks)")
 def test_assemble(tmp_path):
     app = D.assemble(_fake_app(tmp_path), tmp_path / "work", _fake_python(tmp_path / "py.tar.gz"), pip=False)
     res = app / "Contents" / "Resources"
