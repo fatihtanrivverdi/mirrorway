@@ -577,28 +577,8 @@ TR = {
         'Mac ekranı',
     'Updated to Mirrorway {version}.':
         'Mirrorway {version} sürümüne güncellendi.',
-    'Settings':
-        'Ayarlar',
-    'Pairing code:':
-        'Eşleştirme kodu:',
-    'Mac address:':
-        'Mac adresi:',
-    "Leave it empty to find the Mac automatically. If it is not found, enter the 'This Mac: …' address from the Mac menu.":
-        "Boş bırakırsanız Mac otomatik bulunur. Bulunamazsa Mac menüsündeki 'Bu Mac: …' adresini yazın.",
-    'Remove Pairing':
-        'Eşleşmeyi kaldır',
-    'Save and Connect':
-        'Kaydet ve bağlan',
-    'Close':
-        'Kapat',
     'Paired Mac: {name} (fingerprint {id})':
         'Eşleşilen Mac: {name} (parmak izi {id})',
-    'This PC connects to the Mac with its device key. To pair with another Mac, click Mirrorway › Pair a New Device… on that Mac and enter the code below.':
-        "Bu bilgisayar Mac'e cihaz anahtarıyla bağlanıyor. Başka bir Mac ile eşleştirmek için Mac'te Mirrorway › Yeni cihaz eşleştir'e tıklayıp kodu aşağıya girin.",
-    'New pairing code:':
-        'Yeni eşleştirme kodu:',
-    "On the Mac, click the Mirrorway icon in the menu bar, choose 'Pair a New Device…' and enter the 6-digit code it shows below.":
-        "Mac'te menü çubuğundaki Mirrorway simgesine tıklayın, 'Yeni cihaz eşleştir'i seçin ve görünen 6 haneli kodu aşağıya girin.",
     "Remove this PC's pairing with the Mac? Connecting again will need a new code from the Mac.":
         "Bu bilgisayarın Mac ile eşleşmesi kaldırılsın mı? Yeniden bağlanmak için Mac'ten yeni bir kod gerekir.",
     'Mac found on the network: {list}':
@@ -869,4 +849,76 @@ TR = {
         'Mac aynı ağdayken Mirrorway kendiliğinden bağlanır',
     'Open Mirrorway':
         "Mirrorway'i aç",
+    'Mac address':
+        'Mac adresi',
+    'Start Mirrorway with Windows':
+        'Windows açılınca Mirrorway başlasın',
+    'GPU (SDL2), Tk if it is not available':
+        'GPU (SDL2), yoksa Tk',
+    'Tk (compatible, slower)':
+        'Tk (uyumlu, daha yavaş)',
+    "Open the Mac's screen when Mirrorway starts":
+        'Mirrorway başlayınca Mac ekranını aç',
+    'Screen window':
+        'Ekran penceresi',
+    'Decode H.264 on the graphics card (D3D11VA)':
+        'H.264 çözümlemesi ekran kartında (D3D11VA)',
+    'Measurements in full screen (F9)':
+        'Tam ekranda ölçümler (F9)',
+    'Measurements box in a window':
+        'Pencerede ölçüm kutusu',
+    'Measurements on the second screen':
+        'İkinci ekranda ölçümler',
+    'Update Mirrorway on the Mac to turn it on from here':
+        "Buradan açmak için Mac'teki Mirrorway'i güncelleyin",
+    "The Mac's sound":
+        "Mac'in sesi",
+    "Show or hide the Mac's screen":
+        'Mac ekranını göster/gizle',
+    'Clicking the tray icon opens the panel':
+        'Tepsi simgesine tıklayınca panel açılsın',
+    'Connection':
+        'Bağlantı',
+    'Clipboard and files':
+        'Pano ve dosyalar',
+    'Shortcuts':
+        'Kısayollar',
+    "encrypted with this PC's device key":
+        'bu bilgisayarın cihaz anahtarıyla şifreli',
+    'encrypted with the pairing code':
+        'eşleştirme koduyla şifreli',
+    'Paired Mac':
+        'Eşleşmiş Mac',
+    'Pair with another Mac':
+        'Başka bir Mac ile eşleştir',
+    'Pair with a Mac':
+        'Bir Mac ile eşleştir',
+    'On the Mac, open the Mirrorway panel, choose Pair a New Device… and type the 6-digit code it shows.':
+        "Mac'te Mirrorway panelini açın, Yeni cihaz eşleştir'i seçin ve gösterdiği 6 haneli kodu yazın.",
+    'Pair':
+        'Eşleştir',
+    'Only needed when the Mac is not found by itself (a firewall blocks UDP 24851)':
+        'Yalnızca Mac kendiliğinden bulunamazsa gerekir (güvenlik duvarı UDP 24851’i engelliyorsa)',
+    'Applies the next time the screen opens':
+        'Ekran bir sonraki açılışta uygulanır',
+    "The Mac's sound plays on this PC":
+        "Mac'in sesi bu bilgisayarda çalıyor",
+    'Copy in Explorer, paste in Finder (and back)':
+        "Gezgin'de kopyala, Finder'da yapıştır (ve tersi)",
+    '⌃⌥ + arrow switches between the computers; ⌃⌥S, ⌃⌥D, ⌃⌥A and ⌃⌥M work there':
+        '⌃⌥ + ok bilgisayarlar arasında geçirir; ⌃⌥S, ⌃⌥D, ⌃⌥A ve ⌃⌥M orada çalışır',
+    "Otherwise it opens the Mac's screen (after Mirrorway restarts)":
+        'Kapalıyken Mac ekranını açar (Mirrorway yeniden başlayınca)',
+    'Used after Mirrorway restarts':
+        'Mirrorway yeniden başlayınca geçerli olur',
+    'Open':
+        'Aç',
+    'Remove pairing':
+        'Eşleştirmeyi kaldır',
+    'Turn off':
+        'Kapat',
+    'Turn on':
+        'Aç',
+    'fingerprint {id}':
+        'parmak izi {id}',
 }

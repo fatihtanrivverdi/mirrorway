@@ -286,3 +286,94 @@ def mac_pages(cfg, st: dict, ctx: Optional[dict] = None) -> List[Page]:
     ctx = ctx or {}
     return [_general(cfg, ctx), _keyboard(cfg, st), _screen(cfg, st, ctx), _audio(cfg, st, ctx),
             _clipboard(cfg, st, ctx), _network(cfg, st), _devices(st), _updates(cfg, ctx)]
+
+
+# ---- Windows Settings window -------------------------------------------------------------------------------------
+def win_pages(cfg, ctx: Optional[dict] = None) -> List[Page]:
+    """The Windows Settings window.
+
+    ctx: state, status_text, mac_name, mac_ip, rtt_ms, auth ("key"/"legacy"), paired, fingerprint, found (text),
+         audio_supported, audio_on, startup {"available", "enabled"}, version
+    """
+    ctx = ctx or {}
+    connected = ctx.get("state") == "connected"
+    paired = bool(ctx.get("paired"))
+    if connected:
+        parts = [p for p in (ctx.get("mac_ip"), f"{ctx['rtt_ms']:.0f} ms" if ctx.get("rtt_ms") is not None else "")
+                 if p]
+        parts.append(T("encrypted with this PC's device key") if ctx.get("auth") == "key"
+                     else T("encrypted with the pairing code"))
+        status = Item("button", "action:reconnect", T("Connected to {name}").format(name=ctx.get("mac_name") or "Mac"),
+                      detail=" · ".join(parts), button=T("Reconnect"), tone="ok")
+    else:
+        status = Item("button", "action:reconnect", ctx.get("status_text") or T("Not connected"),
+                      detail=ctx.get("found") or "", button=T("Reconnect"),
+                      tone="warn" if ctx.get("state") in ("error", "auth", "unpaired") else "")
+    conn = [status]
+    if paired:
+        conn.append(Item("button", "action:unpair", T("Paired Mac"),
+                         detail=f"{ctx.get('mac_name') or 'Mac'} · " + T("fingerprint {id}").format(
+                             id=ctx.get("fingerprint") or "—"), button=T("Remove pairing")))
+    conn.append(Item("code", "action:pair", T("Pair with another Mac") if paired else T("Pair with a Mac"),
+                     detail=T("On the Mac, open the Mirrorway panel, choose Pair a New Device… and type the 6-digit "
+                              "code it shows."), button=T("Pair")))
+    conn.append(Item("entry", "host", T("Mac address"), cfg.get("host") or "",
+                     detail=T("Only needed when the Mac is not found by itself (a firewall blocks UDP 24851)")))
+    start = ctx.get("startup") or {}
+    conn.append(Item("switch", "startup", T("Start Mirrorway with Windows"), bool(start.get("enabled")),
+                     enabled=bool(start.get("available", True))))
+
+    viewers = [("auto", T("GPU (SDL2), Tk if it is not available")), ("tk", T("Tk (compatible, slower)"))]
+    screen = [
+        Item("switch", "open_viewer_on_start", T("Open the Mac's screen when Mirrorway starts"),
+             bool(cfg.get("open_viewer_on_start"))),
+        Item("popup", "viewer", T("Screen window"), cfg.get("viewer") or "auto", viewers),
+        Item("switch", "hw_decode", T("Decode H.264 on the graphics card (D3D11VA)"), bool(cfg.get("hw_decode", True)),
+             detail=T("Applies the next time the screen opens")),
+        Item("switch", "overlay_fullscreen", T("Measurements in full screen (F9)"),
+             bool(cfg.get("overlay_fullscreen", True))),
+        Item("switch", "overlay_window", T("Measurements box in a window"), bool(cfg.get("overlay_window"))),
+        Item("switch", "overlay_extend", T("Measurements on the second screen"), bool(cfg.get("overlay_extend"))),
+    ]
+    if not connected:
+        sound = T("Off")
+    elif not ctx.get("audio_supported"):
+        sound = T("Update Mirrorway on the Mac to turn it on from here")
+    else:
+        sound = T("The Mac's sound plays on this PC") if ctx.get("audio_on") else T("Off")
+    audio = [Item("button", "action:audio", T("The Mac's sound"), detail=sound,
+                  button=T("Turn off") if ctx.get("audio_on") else T("Turn on"),
+                  enabled=connected and bool(ctx.get("audio_supported")))]
+
+    clip = [
+        Item("switch", "clipboard", T("Clipboard sync"), bool(cfg.get("clipboard")),
+             detail=T("Text, formatted text and images, both ways")),
+        Item("switch", "file_clipboard", T("File copy and paste"), bool(cfg.get("file_clipboard", True)),
+             detail=T("Copy in Explorer, paste in Finder (and back)")),
+    ]
+    letters = [("", T("Off"))] + [(c, quick.win_shortcut(c)) for c in sorted(quick.MAC_KEYCODES)]
+    shortcuts = [
+        Item("popup", "shortcut:screen", T("Show or hide the Mac's screen"), quick.win_shortcut_letters(cfg)["screen"],
+             letters),
+        Item("text", "mac_keys", T("On the Mac"),
+             detail=T("⌃⌥ + arrow switches between the computers; "
+                      "⌃⌥S, ⌃⌥D, ⌃⌥A and ⌃⌥M work there")),
+    ]
+    general = [
+        Item("switch", "quick_panel", T("Clicking the tray icon opens the panel"), bool(cfg.get("quick_panel", True)),
+             detail=T("Otherwise it opens the Mac's screen (after Mirrorway restarts)")),
+        Item("popup", "language", T("Language"), cfg.get("language") or "auto", languages(),
+             detail=T("Used after Mirrorway restarts")),
+        Item("button", "action:logs", T("Log files"), button=T("Open")),
+        Item("button", "action:diag", T("Diagnostics bundle"),
+             detail=T("Logs and settings in one zip, without codes or keys"), button=T("Create")),
+        Item("text", "version", T("Version"), detail=f"Mirrorway {ctx.get('version', '')}"),
+    ]
+    return [
+        Page("connection", T("Connection"), "", "#5B3FD6", [Group("", conn)]),
+        Page("screen", T("Mac screen"), "", "#6E56CF", [Group("", screen)]),
+        Page("audio", T("Audio"), "", "#D9485F", [Group("", audio)]),
+        Page("clipboard", T("Clipboard and files"), "", "#0F8F80", [Group("", clip)]),
+        Page("shortcuts", T("Shortcuts"), "", "#3B6FD8", [Group("", shortcuts)]),
+        Page("general", T("General"), "", "#6B6B70", [Group("", general)]),
+    ]

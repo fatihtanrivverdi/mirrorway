@@ -9,12 +9,11 @@ import sys
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk
 
 from PIL import Image, ImageDraw
 
 from .. import APP_NAME, __version__
-from .. import quick
+from .. import prefs, quick
 from ..clipsync import ClipboardSync
 from ..config import CONFIG_DIR
 from ..discovery import Listener
@@ -446,9 +445,87 @@ class WinApp:
     # ---- settings ------------------------------------------------------------
     def open_settings(self) -> None:
         if self.settings_win is not None:
+            self.settings_win.top.deiconify()
             self.settings_win.top.lift()
             return
+        from .settings import SettingsWindow
         self.settings_win = SettingsWindow(self)
+
+    def settings_pages(self) -> list:
+        c, creds = self.control, self.creds
+        fp = ""
+        if creds.paired():
+            try:
+                from ..devkeys import fingerprint
+                fp = fingerprint(creds.mac_pub())
+            except Exception:
+                fp = ""
+        found = self.discovery.all()
+        if found:
+            found_text = T("Mac found on the network: {list}").format(
+                list=", ".join(f"{n} ({ip})" for ip, n, _ in found))
+        elif self.discovery.error:
+            found_text = T("Discovery is not working (UDP 24851 could not be opened); enter the address by hand.")
+        else:
+            found_text = T("Looking for the Mac on the network…")
+        from . import startup
+        ctx = {"state": self.state, "status_text": self.status_text, "mac_name": c.server_name or creds.mac_name(),
+               "mac_ip": (c.file_target or ("",))[0], "rtt_ms": c.last_rtt_ms, "auth": c.auth_mode,
+               "paired": creds.paired(), "fingerprint": fp, "found": found_text,
+               "audio_supported": c.can_ask_mac(), "audio_on": c.audio_on,
+               "startup": {"available": startup.available(), "enabled": startup.is_enabled()},
+               "version": __version__}
+        return prefs.win_pages(self.cfg, ctx)
+
+    _BOOL_SETTINGS = ("clipboard", "file_clipboard", "open_viewer_on_start", "hw_decode", "overlay_fullscreen",
+                      "overlay_window", "overlay_extend", "quick_panel")
+
+    def apply_setting(self, key: str, value) -> None:
+        """A change in the Settings window."""
+        log.info("Setting changed: %s", key)
+        c = self.control
+        try:
+            if key in self._BOOL_SETTINGS:
+                self.cfg.set(key, bool(value))
+            elif key == "viewer":
+                self.cfg.set("viewer", value)
+            elif key == "language":
+                self._set_language(value)
+            elif key == "host":
+                host = str(value or "").strip()
+                if host != (self.cfg.get("host") or ""):
+                    self.cfg.set("host", host)
+                    c.kick()
+            elif key == "shortcut:screen":
+                self.cfg.set("shortcuts", {"screen": value or ""})
+                if self.hotkeys is not None:
+                    self.hotkeys.stop()
+                    self.hotkeys = None
+                if sys.platform == "win32":
+                    self._start_hotkeys()
+            elif key == "startup":
+                from . import startup
+                if value:
+                    startup.enable(c.install_root)
+                else:
+                    startup.disable()
+            elif key == "action:reconnect":
+                self._reconnect_until = time.monotonic() + 3.0
+                c.kick()
+            elif key == "action:audio":
+                c.ask_mac({"audio": not c.audio_on})
+            elif key == "action:logs":
+                if sys.platform == "win32":
+                    os.startfile(str(CONFIG_DIR))
+            elif key == "action:diag":
+                self.make_diag()
+            else:
+                log.warning("Unknown setting: %s", key)
+                return
+        except Exception as exc:
+            log.exception("Could not apply the setting %s", key)
+            self._show_notification(APP_NAME, T("Could not change the setting: {error}").format(error=exc))
+        self._refresh_icon()
 
     def apply_settings(self, host: str, code: str) -> None:
         self.cfg.set("host", host.strip(), save=False)
@@ -522,100 +599,3 @@ class WinApp:
                 self.icon.stop()
         finally:
             self.root.quit()
-
-
-class SettingsWindow:
-    def __init__(self, app: WinApp):
-        self.app = app
-        cfg = app.cfg
-        top = self.top = tk.Toplevel(app.root)
-        top.title(APP_NAME + " — " + T("Settings"))
-        top.resizable(False, False)
-        top.protocol("WM_DELETE_WINDOW", self.close)
-        frm = ttk.Frame(top, padding=16)
-        frm.grid(sticky="nsew")
-
-        self.pair_var = tk.StringVar(value="")
-        ttk.Label(frm, textvariable=self.pair_var, wraplength=400, foreground="#15803d").grid(
-            row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
-        self.help_var = tk.StringVar(value="")
-        ttk.Label(frm, textvariable=self.help_var, wraplength=400).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(0, 10))
-
-        self.code_label = ttk.Label(frm, text=T("Pairing code:"))
-        self.code_label.grid(row=2, column=0, sticky="w")
-        self.code_var = tk.StringVar(value="")
-        code_entry = ttk.Entry(frm, textvariable=self.code_var, width=24, font=("Consolas", 12))
-        code_entry.grid(row=2, column=1, sticky="ew", pady=4)
-
-        ttk.Label(frm, text=T("Mac address:")).grid(row=3, column=0, sticky="w")
-        self.host_var = tk.StringVar(value=cfg.get("host") or "")
-        ttk.Entry(frm, textvariable=self.host_var, width=24).grid(row=3, column=1, sticky="ew", pady=4)
-        ttk.Label(frm, text=T("Leave it empty to find the Mac automatically. If it is not found, enter the "
-                              "'This Mac: …' address from the Mac menu."), wraplength=400, foreground="#666").grid(
-            row=4, column=0, columnspan=2, sticky="w")
-
-        self.found_var = tk.StringVar(value="")
-        ttk.Label(frm, textvariable=self.found_var, foreground="#2563eb").grid(
-            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        self.status_var = tk.StringVar(value=app.status_text)
-        ttk.Label(frm, textvariable=self.status_var, wraplength=400).grid(
-            row=6, column=0, columnspan=2, sticky="w", pady=(4, 10))
-
-        btns = ttk.Frame(frm)
-        btns.grid(row=7, column=0, columnspan=2, sticky="ew")
-        self.unpair_btn = ttk.Button(btns, text=T("Remove Pairing"), command=self.unpair)
-        ttk.Button(btns, text=T("Save and Connect"), command=self.save).pack(side="right")
-        ttk.Button(btns, text=T("Close"), command=self.close).pack(side="right", padx=(0, 8))
-
-        top.bind("<Return>", lambda e: self.save())
-        code_entry.focus_set()
-        self.refresh_pairing()
-        self._tick()
-
-    def refresh_pairing(self) -> None:
-        creds = self.app.creds
-        if creds.paired():
-            from ..devkeys import fingerprint
-            pub = creds.mac_pub()
-            self.pair_var.set(T("Paired Mac: {name} (fingerprint {id})").format(name=creds.mac_name(), id=fingerprint(pub)))
-            self.help_var.set(T("This PC connects to the Mac with its device key. To pair with another Mac, "
-                                "click Mirrorway › Pair a New Device… on that Mac and enter the code below."))
-            self.code_label.configure(text=T("New pairing code:"))
-            self.unpair_btn.pack(side="left")
-        else:
-            self.pair_var.set("")
-            self.help_var.set(T("On the Mac, click the Mirrorway icon in the menu bar, choose 'Pair a New Device…' "
-                                "and enter the 6-digit code it shows below."))
-            self.code_label.configure(text=T("Pairing code:"))
-            self.unpair_btn.pack_forget()
-
-    def unpair(self) -> None:
-        from tkinter import messagebox
-        if messagebox.askyesno(APP_NAME, T("Remove this PC's pairing with the Mac? Connecting again will need "
-                                           "a new code from the Mac."), parent=self.top):
-            self.app.unpair()
-            self.refresh_pairing()
-
-    def _tick(self) -> None:
-        if self.top is None:
-            return
-        found = self.app.discovery.all()
-        if found:
-            self.found_var.set(T("Mac found on the network: {list}").format(list=", ".join(f"{n} ({ip})" for ip, n, _ in found)))
-        elif self.app.discovery.error:
-            self.found_var.set(T("Discovery is not working (UDP 24851 could not be opened); enter the address by hand."))
-        else:
-            self.found_var.set(T("Looking for the Mac on the network…"))
-        self.top.after(1000, self._tick)
-
-    def save(self) -> None:
-        self.app.apply_settings(self.host_var.get(), self.code_var.get())
-        self.code_var.set("")
-        self.status_var.set(T("Connecting…"))
-
-    def close(self) -> None:
-        top, self.top = self.top, None
-        if top is not None:
-            top.destroy()
-        self.app.settings_win = None

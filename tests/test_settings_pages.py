@@ -108,3 +108,38 @@ def test_signature_changes_only_with_shape():
     c = pages(st=status(devices=[{"id": "AB12", "name": "PC"}]))["devices"].signature()
     assert c != a                                               # a new row: rebuild
     assert pages(cfg(clipboard=False))["clipboard"].signature() == pages()["clipboard"].signature()
+
+
+# ---- Windows --------------------------------------------------------------------------------------------------
+def win(c=None, **ctx):
+    return {p.id: p for p in P.win_pages(c or Cfg(clipboard=True), ctx)}
+
+
+def test_win_pages():
+    ps = P.win_pages(Cfg(), {})
+    assert [p.id for p in ps] == ["connection", "screen", "audio", "clipboard", "shortcuts", "general"]
+    for p in ps:
+        keys = [it.key for it in p.items()]
+        assert len(keys) == len(set(keys)), p.id
+        for it in p.items():
+            if it.kind == "popup":
+                assert P.selected(it) is not None, (p.id, it.key)
+    c = win(state="connected", mac_name="MacBook-Pro", mac_ip="192.168.1.20", rtt_ms=3.4, auth="key", paired=True,
+            fingerprint="7C4E 91A2", startup={"available": True, "enabled": True})["connection"]
+    st = c.item("action:reconnect")
+    assert st.title == "Connected to MacBook-Pro" and st.tone == "ok"
+    assert st.detail == "192.168.1.20 · 3 ms · encrypted with this PC's device key"
+    assert c.item("action:unpair").detail == "MacBook-Pro · fingerprint 7C4E 91A2"
+    assert c.item("action:pair").title == "Pair with another Mac" and "6-digit" in c.item("action:pair").detail
+    assert c.item("startup").value is True and c.item("host").kind == "entry"
+    c = win(state="unpaired", status_text="Not paired", found="Looking for the Mac on the network…")["connection"]
+    assert c.item("action:reconnect").title == "Not paired" and c.item("action:reconnect").tone == "warn"
+    assert "action:unpair" not in [it.key for it in c.items()] and c.item("action:pair").title == "Pair with a Mac"
+    a = win(state="connected", audio_supported=True, audio_on=True)["audio"].item("action:audio")
+    assert a.enabled and a.button == "Turn off" and a.detail == "The Mac's sound plays on this PC"
+    a = win(state="connected", audio_supported=False)["audio"].item("action:audio")
+    assert not a.enabled and "Update Mirrorway" in a.detail
+    s = win(Cfg(shortcuts={"screen": "k"}))["shortcuts"].item("shortcut:screen")
+    assert s.value == "k" and ("k", "Ctrl+Alt+K") in s.options and s.options[0] == ("", "Off")
+    g = win(version="3.1.3")["general"]
+    assert g.item("version").detail == "Mirrorway 3.1.3" and g.item("quick_panel").value is True

@@ -140,6 +140,8 @@ While Windows sleeps, **Mirrorway › Wake Windows** wakes it from the Mac. The 
 
 **Left-click** the Mirrorway icon in the Windows tray to open the panel above it: the connection status and which edge of the Mac's screen leads here, **Show the Mac's screen** / **Hide the Mac's screen** (`Ctrl + Alt + S` anywhere), and tiles for **Clipboard**, **Mac's sound** (turns the audio transfer on the Mac on or off), **Files**, **Reconnect**, **Pair a Mac** and **Diagnostics**. It follows the Windows light or dark app theme and closes when you click elsewhere or press Esc. Right-click the icon for the menu.
 
+The gear in the panel (or **Settings…** in the menu) opens the Windows Settings window: **Connection** (status, the paired Mac, the 6-digit pairing code, the Mac's address, starting with Windows), **Mac screen** (the screen window, GPU decoding, measurements), **Audio**, **Clipboard and files**, **Shortcuts** (the letter for `Ctrl + Alt`) and **General** (language, logs, diagnostics).
+
 ### Watching the Mac's screen on Windows
 
 Click **Show the Mac's screen** in the tray panel, press `Ctrl + Alt + S`, or right-click the tray icon › **Show the Mac's Screen**. On the Mac, `⌃⌥S` or the **Screen** tile opens and closes it too. In the window, **F11** or a **double-click** switches to full screen and **Esc** leaves it. In full screen the measurements (fps, bandwidth, target bitrate, latency) appear in the top right corner; **F9** shows or hides them. Choose the picture quality and which Mac display is shared in the Mac's menu.
@@ -276,7 +278,8 @@ mirrorway/
                            panel.py + settings.py (quick panel, Settings window), vdisplay.py,
                            extend_mgr.py (second screen life cycle)
   win/                     remote.py (input logic), backend.py + winapi.py (SendInput), client.py, sdlview.py,
-                           viewer.py, app.py (Tk + pystray), panel.py (tray panel), hotkeys.py (Ctrl+Alt shortcuts)
+                           viewer.py, app.py (Tk + pystray), panel.py (tray panel), settings.py (Settings window),
+                           hotkeys.py (Ctrl+Alt shortcuts), startup.py (start with Windows)
 macapp/                    Mirrorway.app launcher (launcher.c), start.sh, build_app.py, icon
 assets/                    logo
 scripts/                   release and packaging scripts

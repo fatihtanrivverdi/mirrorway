@@ -292,6 +292,18 @@ def step4b():
 def step5():
     app._drain()
     check("settings could be reopened", app.settings_win is not None)
+    w = app.settings_win
+    built = []
+    for page in [pg.id for pg in w.pages]:
+        w.show_page(page)
+        built.append(bool(w._updaters))
+    check("settings: every page builds", len(built) == 6 and all(built))
+    w.show_page("clipboard")
+    app.apply_setting("file_clipboard", False)
+    check("settings: a switch applies", cfg.get("file_clipboard") is False)
+    app.apply_setting("file_clipboard", True)
+    w.show_page("connection")
+    check("settings: connected status", "Connected to" in w.pages[0].groups[0].items[0].title)
     import pathlib
     import mirrorway.diag as D
     D.default_output_dir = lambda: pathlib.Path(os.environ["MIRRORWAY_HOME"])

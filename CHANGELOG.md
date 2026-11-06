@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.3 — the Settings window (Windows)
+- **New Settings window on Windows**, in the style of Windows 11 and following its light/dark theme: Connection
+  (status with Reconnect, the paired Mac with its fingerprint, a 6-digit pairing code in separate boxes, the Mac's
+  address, starting with Windows), Mac screen, Audio, Clipboard and files, Shortcuts and General.
+- **Start with Windows** can be turned off and on (the shortcut in the Startup folder).
+- The `Ctrl + Alt` shortcut letter can be changed or turned off; it applies at once.
+
 ## 3.1.2 — the tray panel (Windows)
 - **Tray panel.** A left click on the Windows tray icon opens a panel above it with the connection status, the
   edge of the Mac's screen that leads to this PC, **Show/Hide the Mac's screen** and tiles for clipboard, the Mac's

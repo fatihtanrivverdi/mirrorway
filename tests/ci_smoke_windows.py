@@ -278,7 +278,102 @@ def tray_panel():
     return ", ".join(out)
 
 
+def settings_window():
+    """The Settings window (Tk) with sample content; two pages printed as PNG (base64)."""
+    import base64
+    import io
+    import time
+    import tkinter as tk
+
+    from PIL import ImageGrab
+    from mirrorway import prefs
+    from mirrorway.win.settings import SettingsWindow
+
+    class Creds:
+        def paired(self):
+            return True
+
+        def mac_name(self):
+            return "MacBook-Pro"
+
+        def mac_pub(self):
+            return b"k" * 32
+
+    class App:
+        def __init__(self, root):
+            self.root, self.cfg, self.creds, self.status_text = root, Cfg(clipboard=True), Creds(), "Connected"
+            self.settings_win, self.changes = None, []
+
+        def settings_pages(self):
+            return prefs.win_pages(self.cfg, {"state": "connected", "mac_name": "MacBook-Pro", "mac_ip": "192.168.1.20",
+                                              "rtt_ms": 3, "auth": "key", "paired": True, "fingerprint": "7C4E 91A2",
+                                              "audio_supported": True, "audio_on": True, "version": "ci",
+                                              "startup": {"available": True, "enabled": True}})
+
+        def apply_setting(self, key, value):
+            self.changes.append(key)
+            self.cfg.set(key, value)
+
+        def apply_settings(self, host, code):
+            self.changes.append(("pair", code))
+
+        def unpair(self):
+            pass
+
+    from mirrorway.win import winapi
+    winapi.set_dpi_aware()
+    root = tk.Tk()
+    root.withdraw()
+    out = []
+    try:
+        for page, theme in (("connection", "light"), ("screen", "dark")):
+            os.environ["MIRRORWAY_THEME"] = theme
+            app = App(root)
+            w = SettingsWindow(app)
+            w.show_page(page)
+            w.top.geometry("+20+20")
+            for _ in range(15):
+                root.update()
+                time.sleep(0.05)
+            x, y = w.top.winfo_rootx(), w.top.winfo_rooty()
+            img = ImageGrab.grab(bbox=(x, y, x + w.top.winfo_width(), y + w.top.winfo_height()))
+            b = io.BytesIO()
+            img.save(b, "PNG")
+            print(f"----- WINSETTINGS PNG {page}-{theme} -----")
+            print(base64.b64encode(b.getvalue()).decode("ascii"))
+            print(f"----- END WINSETTINGS PNG {page}-{theme} -----")
+            if page == "connection":
+                w.code_var.set("123456")
+                w.save()
+                assert ("pair", "123456") in app.changes, app.changes
+            out.append(f"{page}/{theme} {img.size[0]}×{img.size[1]}")
+            w.close()
+    finally:
+        os.environ.pop("MIRRORWAY_THEME", None)
+        root.destroy()
+    return ", ".join(out)
+
+
+def startup_link():
+    """Start with Windows: the Startup shortcut is made (with PowerShell, as CI has no Start menu shortcut) and
+    removed again."""
+    from pathlib import Path
+    from mirrorway.win import startup
+    assert startup.available()
+    was = startup.is_enabled()
+    startup.enable(Path(os.path.dirname(HERE)))
+    try:
+        assert startup.is_enabled() and startup.link().stat().st_size > 100
+    finally:
+        if not was:
+            startup.disable()
+    assert startup.is_enabled() == was
+    return str(startup.link())
+
+
 check("DPAPI", dpapi)
+check("Settings window (Tk)", settings_window)
+check("Start with Windows (Startup shortcut)", startup_link)
 check("Shortcuts (RegisterHotKey)", hotkeys)
 check("Tray panel (Tk)", tray_panel)
 check("H.264 encoding + decoding", h264)
