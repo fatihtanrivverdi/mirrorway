@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.4 — fix: Mirrorway on Windows closed right after starting
+- The Language submenu of the tray icon made pystray refuse the menu, so the Windows app ended at once (since 3.0).
+  The CI's stand-in for pystray now checks menu actions the same way.
+
 ## 3.1.3 — the Settings window (Windows)
 - **New Settings window on Windows**, in the style of Windows 11 and following its light/dark theme: Connection
   (status with Reconnect, the paired Mac with its fingerprint, a 6-digit pairing code in separate boxes, the Mac's

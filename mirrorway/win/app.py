@@ -17,7 +17,6 @@ from .. import prefs, quick
 from ..clipsync import ClipboardSync
 from ..config import CONFIG_DIR
 from ..discovery import Listener
-from ..i18n import NAMES as LANGUAGE_NAMES
 from ..i18n import T
 from ..protocol import MSG_LOG
 from . import winapi
@@ -225,9 +224,9 @@ class WinApp:
               checked=lambda item: bool(self.cfg.get("clipboard"))),
             M(T("Reconnect"), lambda icon, item: self.control.kick()),
             M(T("Language"), pystray.Menu(*[
-                M(label, lambda icon, item, k=key: self._post(self._set_language, k),
+                M(label, self._language_action(key),
                   checked=lambda item, k=key: (self.cfg.get("language") or "auto") == k, radio=True)
-                for key, label in [("auto", T("Automatic (system)"))] + list(LANGUAGE_NAMES.items())])),
+                for key, label in prefs.languages()])),
             M(T("Open the Log Folder"), lambda icon, item: os.startfile(str(CONFIG_DIR))),
             M(T("Create Diagnostics Bundle"), lambda icon, item: self._post(self.make_diag)),
             pystray.Menu.SEPARATOR,
@@ -235,6 +234,10 @@ class WinApp:
         )
         self.icon = pystray.Icon("mirrorway", make_icon(COLORS["idle"]), APP_NAME, menu)
         self.icon.run_detached()   # on Windows the tray runs on its own thread
+
+    def _language_action(self, key: str):
+        # pystray accepts actions with 0, 1 or 2 parameters only (a default argument counts as one)
+        return lambda icon, item: self._post(self._set_language, key)
 
     def _set_language(self, key: str) -> None:
         if (self.cfg.get("language") or "auto") == key:

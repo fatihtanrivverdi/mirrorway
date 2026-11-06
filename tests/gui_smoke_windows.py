@@ -20,9 +20,21 @@ u = stubs.install_windows()
 ps = types.ModuleType("pystray")
 
 
+def _assert_action(action):
+    """As pystray checks it: a callable takes 0, 1 or 2 parameters (default arguments count), or a submenu."""
+    if action is None or isinstance(action, Menu) or not callable(action):
+        return action
+    import inspect
+    argcount = action.__code__.co_argcount - (1 if inspect.ismethod(action) else 0)
+    if argcount not in (0, 1, 2):
+        raise ValueError(action)
+    return action
+
+
 class MenuItem:
     def __init__(self, text, action, checked=None, radio=False, default=False, visible=True, enabled=True):
         self.text_src, self.action, self.checked, self.default, self.enabled = text, action, checked, default, enabled
+        _assert_action(action)
 
     @property
     def text(self):
