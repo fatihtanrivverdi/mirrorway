@@ -723,8 +723,6 @@ TR = {
         '{scale}× ekran oranı (toplam {total}×)',
     'Pointer':
         'İmleç',
-    'A Windows monitor becomes a second screen for the Mac (a virtual display). Experimental.':
-        "Bir Windows monitörü Mac'in ikinci ekranı olur (sanal ekran). Deneysel.",
     'Shows a 6-digit code to enter on Windows':
         "Windows'a girilecek 6 haneli kodu gösterir",
     'Help':

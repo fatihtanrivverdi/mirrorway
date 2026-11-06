@@ -179,7 +179,7 @@ def _screen(cfg, st, ctx) -> Page:
         Group(T("Second screen"), [
             Item("popup", "extend_monitor", T("Windows monitor"), tuple(sel) if isinstance(sel, list) else None,
                  ext_options, detail=ctx.get("extend_text", "")),
-        ], T("A Windows monitor becomes a second screen for the Mac (a virtual display). Experimental.")),
+        ]),
     ])
 
 
