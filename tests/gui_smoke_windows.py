@@ -266,7 +266,12 @@ def step5():
     p = app.make_diag()
     check("diagnostics bundle created", p is not None and p.exists() and p.stat().st_size > 200)
     app.settings_win.close()
-    app.viewer.close()
+    check("the Mac can close the screen window", server.request_viewer(False))     # Screen tile / Control+Option+S
+    when(lambda: app.viewer is None, step6, timeout_ms=8000)
+
+
+def step6():
+    check("screen window closed by the Mac", app.viewer is None)
     check("video connection closed", app.video is None)
     import mirrorway.win.app as appmod
     launched = []

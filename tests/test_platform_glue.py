@@ -238,3 +238,81 @@ def test_mac_app_restarts_running_instance(tmp_path):
         print('OK')
     """)
     assert "OK" in out
+
+
+def test_mac_app_quick_actions():
+    """Panel clicks and quick shortcuts change the same settings as the menu; the panel is optional."""
+    out = run_script("""
+        import stubs
+        Q, AK, R, pb = stubs.install_mac()
+        from mirrorway.config import Config, MAC_DEFAULTS
+        cfg = Config('mac-quick-test', MAC_DEFAULTS)
+        from mirrorway.mac import app as A
+        a = A.MirrorwayMacApp(cfg)
+        assert a.server.router.on_action is not None
+        a.server.load_identity()
+        a._tick(None)                                   # no status item in the fake rumps: no panel
+        assert a.panel is None
+
+        class Panel:
+            def __init__(self):
+                self.models, self.shown, self.popups = [], False, []
+            def update(self, m):
+                self.models.append(m)
+            def is_shown(self):
+                return self.shown
+            def close(self):
+                self.shown = False
+            def popup(self, key, items):
+                self.popups.append((key, items))
+        p = a.panel = Panel()
+        p.shown = True
+        a._tick(None)
+        m = p.models[-1]
+        assert m.header.state == 'waiting' and not m.primary.enabled
+        # toggles: the menu item follows the setting
+        clip = cfg.get('clipboard')
+        a.panel_action('tile:clipboard')
+        assert cfg.get('clipboard') == (not clip) and a.mi_clip.state == int(not clip)
+        assert p.models[-1].tile('clipboard').on == (not clip)
+        a.panel_action('tile:files')
+        assert cfg.get('file_clipboard') is False and a.mi_files.state == 0
+        a.quick_action('audio')                         # Control + Option + A
+        assert cfg.get('audio') is True and a.mi_audio.state == 1
+        # screen and second screen need Windows; nothing happens while it is not connected
+        sent = []
+        a.server.request_viewer = lambda show=True: sent.append(show)
+        a.panel_action('tile:screen')
+        assert sent == []
+        a.toggle_screen({'connected': True, 'video': True})
+        a.toggle_screen({'connected': True, 'video': False})
+        assert sent == [False, True]
+        cfg.set('win_monitors', [[0, 0, 1920, 1080], [1920, 0, 2560, 1440]])
+        a.server.extend.changed = lambda: None
+        a.toggle_second_screen({'extend': {'desired': False}})
+        assert cfg.get('extend_monitor') == [1920, 0, 2560, 1440] == cfg.get('extend_last')
+        a.toggle_second_screen({'extend': {'desired': True}})
+        assert cfg.get('extend_monitor') is None and cfg.get('extend_last') == [1920, 0, 2560, 1440]
+        a._set_extend([0, 0, 1920, 1080])
+        a._set_extend(None)
+        a.toggle_second_screen({'extend': {'desired': False}})
+        assert cfg.get('extend_monitor') == [0, 0, 1920, 1080]           # the monitor chosen last
+        # the Network row opens a small menu whose items run the menu's actions
+        a.panel_action('row:network')
+        key, items = p.popups[-1]
+        assert key == 'row:network' and items[1] is None
+        lock = cfg.get('network_lock', True)
+        [it for it in items if it and it[0] == 'Work Only on the Home Network'][0][1]()
+        assert cfg.get('network_lock', True) == (not lock)
+        # pairing closes the panel and shows the code
+        a.panel_action('row:pair')
+        assert not p.shown and 'enter this code' in R.alerts[-1][1]
+        # the switch button: not connected -> the usual message
+        a.panel_action('primary')
+        assert 'not connected' in R.alerts[-1][1]
+        # turning the panel off from the menu
+        a._toggle_quick_panel(a.mi_panel)
+        assert cfg.get('quick_panel') is False and a.mi_panel.state == 0
+        print('OK')
+    """)
+    assert "OK" in out

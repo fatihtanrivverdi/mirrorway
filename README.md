@@ -77,6 +77,27 @@ Mirrorway was called Köprü until version 2.8. The installers above replace it 
 
 ## 3. Using Mirrorway
 
+### The quick panel
+
+Click the **Mirrorway icon** in the menu bar to open the quick panel:
+
+- the connection status (network, latency, fps and video format),
+- **Switch to Windows** / **Back to the Mac**,
+- tiles that turn things on and off with one click: **Screen** (the Mac's screen window on Windows), **Second screen**, **Audio**, **Clipboard**, **Files** and **Wake Windows**,
+- **Pair a New Device…**, **Network** (trust this network, home network only) and **Disconnect**,
+- **Settings…** (`⌘,`) opens the full menu; **right-click** (or Control-click) the icon to open it directly.
+
+Quick shortcuts work anywhere, also while you control Windows:
+
+| Shortcut | Action |
+|---|---|
+| `⌃ Control + ⌥ Option + S` | Show or hide the Mac's screen on Windows |
+| `⌃ + ⌥ + D` | Second screen on or off (the monitor chosen last) |
+| `⌃ + ⌥ + A` | Play the Mac's sound on Windows, or back on the Mac |
+| `⌃ + ⌥ + M` | Open or close the quick panel |
+
+The letters can be changed or turned off with the `shortcuts` setting in `~/.mirrorway/mac.json` (for example `"shortcuts": {"screen": "s", "second": "", "audio": "a", "panel": "m"}`). To keep the classic menu on a left click, turn off **Mirrorway › Click Opens the Quick Panel**.
+
 ### Switching to Windows and back
 
 - **At the screen edge:** by default Windows is assumed to be on the **right** of the Mac. Push the pointer against the right edge of the Mac's screen to move to Windows; push it against the left edge of the Windows screen to come back. Change the side with **Mirrorway › Windows Is on This Side of the Screen**.
@@ -241,9 +262,11 @@ mirrorway/
   clipsync.py, richclip.py clipboard sync: format bundles, chunked transfer, CF_HTML and DIB conversions
   filexfer.py              file copy and paste: manifests, safe paths, a separate encrypted channel
   i18n.py, i18n_tr.py      interface language (English source texts, Turkish catalog)
-  assets/                  menu bar and Windows icons
+  quick.py                 quick panel content and quick shortcuts (independent of the interface toolkit)
+  assets/                  menu bar and Windows icons, the logo for the panel
   mac/                     router.py (input logic), tap.py (CGEventTap), capture.py, server.py, app.py (rumps),
-                           vdisplay.py (virtual display helper), extend_mgr.py (second screen life cycle)
+                           panel.py (the quick panel, AppKit), vdisplay.py (virtual display helper),
+                           extend_mgr.py (second screen life cycle)
   win/                     remote.py (input logic), backend.py + winapi.py (SendInput), client.py, sdlview.py,
                            viewer.py, app.py (Tk + pystray)
 macapp/                    Mirrorway.app launcher (launcher.c), start.sh, build_app.py, icon

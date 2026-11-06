@@ -12,7 +12,9 @@ import time
 import rumps
 
 from .. import APP_NAME, __version__
+from .. import quick
 from ..config import CONFIG_DIR
+from ..extend import choose_monitor
 from ..i18n import NAMES as LANGUAGE_NAMES
 from ..i18n import T
 from ..wol import WakeSession
@@ -53,6 +55,16 @@ def layouts():
 
 def _open(url: str) -> None:
     subprocess.Popen(["open", url])
+
+
+def _main_thread(fn, *args) -> None:
+    """Run fn on the main (menu) thread soon; directly where there is no Cocoa run loop (tests)."""
+    try:
+        from PyObjCTools import AppHelper
+    except ImportError:
+        fn(*args)
+        return
+    AppHelper.callAfter(fn, *args)
 
 
 def _reveal(path) -> None:
@@ -133,6 +145,12 @@ class MirrorwayMacApp(rumps.App):
         self._wake_msg_until = 0.0
         self.updater = U.Updater(cfg)
         self._restart_pending = False
+        # quick panel (left click on the icon); the classic menu opens with a right click
+        self.panel = None
+        self._panel_tried = False
+        self._ns_menu = None
+        self._status_target = None
+        self.server.router.on_action = self._on_shortcut
         self._build_menu()
 
     # ---- menu ---------------------------------------------------------------
@@ -295,6 +313,8 @@ class MirrorwayMacApp(rumps.App):
                 log.exception("Could not add the login item")
             cfg.set("login_item_set", True)
         self.mi_login.state = int(bool(self.bundle) and loginitem.is_enabled())
+        self.mi_panel = rumps.MenuItem(T("Click Opens the Quick Panel"), callback=self._toggle_quick_panel)
+        self.mi_panel.state = int(bool(cfg.get("quick_panel", True)))
 
         # Language
         self.m_lang = rumps.MenuItem(T("Language"))
@@ -353,6 +373,7 @@ class MirrorwayMacApp(rumps.App):
             None,
             self.m_update,
             self.mi_login,
+            self.mi_panel,
             self.m_lang,
             self.m_perm,
             rumps.MenuItem(T("Disconnect"), callback=lambda _s: self.server.disconnect_all()),
@@ -667,6 +688,8 @@ class MirrorwayMacApp(rumps.App):
 
     def _set_extend(self, value) -> None:
         self.cfg.set("extend_monitor", list(value) if value else None)
+        if value:
+            self.cfg.set("extend_last", list(value))
         self._extend_sig = None
         threading.Thread(target=self.server.extend.changed, daemon=True, name="mirrorway-extend").start()
 
@@ -733,6 +756,204 @@ class MirrorwayMacApp(rumps.App):
         if t is None:
             return T("Wake Windows (connect once first)")
         return T("Wake Windows ({name})").format(name=t.get("name") or t.get("ip"))
+
+    # ---- quick panel and shortcuts ---------------------------------------------------------------
+    def _on_shortcut(self, action: str) -> None:
+        """Called by the router on the event tap thread (Control + Option + letter)."""
+        _main_thread(self.quick_action, action)
+
+    def quick_action(self, action: str) -> None:
+        log.info("Quick shortcut: %s", action)
+        if action == "panel":
+            self.toggle_panel()
+        else:
+            self.panel_action("tile:" + action)
+
+    def toggle_screen(self, st=None) -> None:
+        """Open or close the Mac's screen window on Windows."""
+        st = st or self.server.status()
+        if not st.get("connected"):
+            return
+        if st.get("video"):
+            self.server.request_viewer(False)
+            return
+        if not self.cfg.get("screen_share"):
+            self.cfg.set("screen_share", True)
+            self.mi_share.state = 1
+            self._request_screen_permission()
+        self.server.request_viewer(True)
+
+    def toggle_second_screen(self, st=None) -> None:
+        """Turn the second screen off, or on with the monitor chosen last (or the best one)."""
+        st = st or self.server.status()
+        if (st.get("extend") or {}).get("desired"):
+            self._set_extend(None)
+            return
+        mons = self.server.extend.win_monitors() or list(self.cfg.get("win_monitors") or [])
+        if not mons:
+            return
+        last = self.cfg.get("extend_last")
+        i = choose_monitor(mons, last) if last else None
+        if i is None:
+            i = choose_monitor(mons, "auto")
+        if i is not None:
+            self._set_extend(mons[i])
+
+    def _toggle_setting(self, key: str, item, default=False) -> None:
+        val = not bool(self.cfg.get(key, default))
+        self.cfg.set(key, val)
+        item.state = int(val)
+
+    def panel_action(self, key: str) -> None:
+        """A click in the panel (or a quick shortcut, as "tile:<name>")."""
+        st = self.server.status()
+        if key == "primary":
+            self.close_panel()
+            if self.server.router.remote:
+                self.server.router.leave_to_mac()
+            else:
+                self.switch_to_windows(None)
+        elif key == "tile:screen":
+            self.toggle_screen(st)
+        elif key == "tile:second":
+            self.toggle_second_screen(st)
+        elif key == "tile:audio":
+            self._toggle_audio(self.mi_audio)
+        elif key == "tile:clipboard":
+            self._toggle_setting("clipboard", self.mi_clip)
+        elif key == "tile:files":
+            self._toggle_setting("file_clipboard", self.mi_files, True)
+        elif key == "tile:wake":
+            if not st.get("connected") and self.server.wol_target() is not None and self.wake.state != "waking":
+                self.wake_windows(None)
+        elif key == "row:pair":
+            self.close_panel()
+            self.pair_new_device(None)
+        elif key == "row:network":
+            self._network_popup(st)
+        elif key == "row:disconnect":
+            self.server.disconnect_all()
+        elif key in ("settings", "footer:settings"):
+            self.close_panel()
+            _main_thread(self.show_menu)
+        elif key == "footer:update":
+            self.close_panel()
+            self.install_update()
+        elif key == "footer:quit":
+            self.quit_app(None)
+            return
+        self.refresh_panel()
+
+    def _network_popup(self, st: dict) -> None:
+        if self.panel is None:
+            return
+        net = st.get("network") or {}
+        self.panel.popup("row:network", [
+            (net.get("text") or T("Network could not be determined"), None, False),
+            None,
+            (T("Trust This Network"), lambda: self._trust_network(None), False),
+            (T("Work Only on the Home Network"), lambda: self._toggle_netlock(self.mi_net_lock),
+             bool(self.cfg.get("network_lock", True))),
+            (T("Reset Trusted Networks (keep only this one)"), lambda: self._reset_networks(None), False),
+        ])
+
+    def panel_model(self, st: dict) -> "quick.Panel":
+        tap = self.tap
+        permission = not (tap is not None and tap.error == "permission" and not tap.is_alive())
+        waking = self.wake.remaining() if self.wake.state == "waking" else None
+        u = self.updater
+        update = u.info.version if (u.state == "available" and u.info is not None) else None
+        return quick.mac_panel(st, self.cfg, permission=permission, waking=waking, update=update)
+
+    def refresh_panel(self, st=None) -> None:
+        if self.panel is None:
+            return
+        try:
+            self.panel.update(self.panel_model(st or self.server.status()))
+        except Exception:
+            log.exception("Could not update the panel")
+
+    def close_panel(self) -> None:
+        if self.panel is not None:
+            self.panel.close()
+
+    def _status_item(self):
+        return getattr(getattr(self, "_nsapp", None), "nsstatusitem", None)
+
+    def _install_panel(self) -> None:
+        """Left click on the icon opens the panel, right click (or Control-click) the classic menu."""
+        if self._panel_tried or not self.cfg.get("quick_panel", True):
+            return
+        item = self._status_item()
+        if item is None:
+            return
+        self._panel_tried = True
+        try:
+            from AppKit import NSEventMaskLeftMouseUp, NSEventMaskRightMouseUp
+            from .panel import QuickPanel, make_target
+            panel = QuickPanel(self.panel_action)
+            target = make_target(click=lambda _tag: self._status_clicked(), menu_closed=self._menu_closed)
+            menu = item.menu()
+            btn = item.button()
+            btn.setTarget_(target)
+            btn.setAction_("clicked:")
+            btn.sendActionOn_(NSEventMaskLeftMouseUp | NSEventMaskRightMouseUp)
+            self.panel, self._ns_menu, self._status_target = panel, menu, target
+            item.setMenu_(None)
+            log.info("Quick panel ready")
+        except Exception:
+            log.exception("Could not set up the quick panel; the menu stays")
+            self.panel = None
+
+    def _status_clicked(self) -> None:
+        from AppKit import NSApplication, NSEventModifierFlagControl, NSEventTypeRightMouseUp
+        ev = NSApplication.sharedApplication().currentEvent()
+        right = ev is not None and (ev.type() == NSEventTypeRightMouseUp
+                                    or bool(ev.modifierFlags() & NSEventModifierFlagControl))
+        if right or self.panel is None or not self.cfg.get("quick_panel", True):
+            self.show_menu()
+        else:
+            self.toggle_panel()
+
+    def toggle_panel(self) -> None:
+        item = self._status_item()
+        if item is None:
+            return
+        if self.panel is None or not self.cfg.get("quick_panel", True):
+            self.show_menu()
+            return
+        if not self.panel.is_shown():
+            self.server.router.leave_to_mac()          # the panel opens on the Mac's screen
+            self.refresh_panel()
+        self.panel.toggle(item.button())
+
+    def show_menu(self) -> None:
+        """The classic menu under the icon (right click, Settings…, or the panel turned off)."""
+        item = self._status_item()
+        menu = self._ns_menu or (item.menu() if item is not None else None)
+        if item is None or menu is None:
+            return
+        self.close_panel()
+        if self._status_target is not None:
+            menu.setDelegate_(self._status_target)
+        item.setMenu_(menu)
+        item.button().performClick_(None)
+
+    def _menu_closed(self) -> None:
+        _main_thread(self._detach_menu)
+
+    def _detach_menu(self) -> None:
+        item = self._status_item()
+        if item is not None and self.panel is not None and self.cfg.get("quick_panel", True):
+            item.setMenu_(None)                         # the next click opens the panel again
+
+    def _toggle_quick_panel(self, sender) -> None:
+        val = not bool(self.cfg.get("quick_panel", True))
+        self.cfg.set("quick_panel", val)
+        sender.state = int(val)
+        if val and self.panel is None:
+            self._panel_tried = False
+            self._install_panel()
 
     def quit_app(self, _sender):
         try:
@@ -827,6 +1048,7 @@ class MirrorwayMacApp(rumps.App):
         if self._restart_pending:
             self._restart_after_update()
             return
+        self._install_panel()
         if self.updater.due():
             self._bg(self.updater.check, "mirrorway-upd-check")
         self._refresh_update_menu()
@@ -892,6 +1114,8 @@ class MirrorwayMacApp(rumps.App):
                 scale=f"{st['auto_scale']:.2f}", total=f"{st['effective_speed']:.2f}")
         extra = f"  (+{', '.join(st['all_ips'][1:])})" if len(st.get("all_ips", [])) > 1 else ""
         self.mi_ip.title = T("This Mac: {address}{extra}  (copy)").format(address=f"{st['ip']}:{st['port']}", extra=extra)
+        if self.panel is not None and self.panel.is_shown():
+            self.refresh_panel(st)
 
 
 def run(cfg) -> None:

@@ -288,10 +288,15 @@ class WinApp:
 
     # ---- second screen -----------------------------------------------------------
     def _view_requested(self, req: dict) -> None:
-        """The Mac opened the second screen: open the screen window if it is closed."""
-        if req.get("open") and (self.viewer is None or self.viewer.closed):
-            logging.getLogger("mirrorway.extend").info("The Mac had the screen window opened (second screen)")
+        """The Mac asked for the screen window (second screen, or the Screen tile in the Mac's panel)."""
+        is_open = self.viewer is not None and not self.viewer.closed
+        if req.get("open") and not is_open:
+            log.info("The Mac had the screen window opened")
             self.toggle_viewer()
+        elif req.get("open") is False and is_open:
+            log.info("The Mac had the screen window closed")
+            self._close_reason = "by the Mac"
+            self.viewer.close()
 
     def _on_video_info(self, info: dict) -> None:
         """From the video thread: if the second screen is on, the window goes full screen on that monitor."""
@@ -338,8 +343,9 @@ class WinApp:
             return                      # a late close notice from an old window
         opened = getattr(self, "_viewer_opened_at", None)
         dur = f" (open for {time.monotonic() - opened:.0f} s)" if opened else ""
-        log.info("Screen window closed by the user%s", dur)
-        self._remote_info(f"Screen window closed by the user{dur}")
+        who, self._close_reason = getattr(self, "_close_reason", None) or "by the user", None
+        log.info("Screen window closed %s%s", who, dur)
+        self._remote_info(f"Screen window closed {who}{dur}")
         if self.video is not None:
             self.video.stop()
             self.video = None

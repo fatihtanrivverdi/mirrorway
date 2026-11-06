@@ -1701,13 +1701,16 @@ class MirrorwayServer:
             self.cfg.set("audio_muted_by_app", False)
             log.info("The Mac's sound was unmuted (Mirrorway had muted it during its previous run)")
 
-    def request_viewer(self) -> None:
-        """Open the screen window on Windows (so the second screen becomes visible)."""
-        if self.supports(EXTEND_FEATURE):
-            try:
-                self.send_json(MSG_VIEW, {"open": True})
-            except Exception:
-                pass
+    def request_viewer(self, show: bool = True) -> bool:
+        """Open (or close) the screen window on Windows: for the second screen and the panel's Screen tile.
+        Windows versions before 3.1 only open it."""
+        if not self.supports(EXTEND_FEATURE):
+            return False
+        try:
+            self.send_json(MSG_VIEW, {"open": bool(show)})
+            return True
+        except Exception:
+            return False
 
     def _files_status(self) -> Optional[dict]:
         p = self.file_progress

@@ -43,7 +43,8 @@ def test_workflow_is_locked_down():
     assert len(sign) == 1 and "make_release.py" in sign[0] and "publish_release" not in sign[0]
     rep = by_name["report"]
     assert "uses:" not in rep and "pytest" not in rep and "pip install" not in rep
-    assert "if: ${{ failure() || (always() && startsWith(github.ref, 'refs/tags/v')) }}" in rep
+    assert ("if: ${{ failure() || (always() && (startsWith(github.ref, 'refs/tags/v') || "
+            "github.event_name == 'workflow_dispatch')) }}") in rep
     assert "git push -q -f" in rep and " ci-logs" in rep and "main" not in rep.split("git push", 1)[1]
     # macOS/Windows only by hand or on a release tag
     for job in ("macos", "windows"):

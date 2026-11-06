@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.1.0 — the quick panel (Mac)
+- **Quick panel.** Clicking the Mirrorway icon in the menu bar opens a panel with the connection status, the
+  switch button and one-click tiles for the screen on Windows, the second screen, audio, clipboard, files and
+  Wake-on-LAN; pairing, network and disconnect are one click away. It follows the light and dark appearance. The
+  full menu opens with a right click or **Settings…**; **Click Opens the Quick Panel** turns the panel off.
+- **Quick shortcuts.** `⌃⌥S` shows or hides the Mac's screen on Windows, `⌃⌥D` turns the second screen on or off,
+  `⌃⌥A` moves the Mac's sound between the Mac and Windows and `⌃⌥M` opens the panel. They also work while you
+  control Windows. The letters are set in the `shortcuts` setting.
+- **The Mac can close the screen window on Windows** (the Screen tile and `⌃⌥S`); Windows needs 3.1 for this,
+  which it receives from the Mac when it connects.
+
 ## 3.0.0 — 6 November 2026
 Köprü is now **Mirrorway**, and the project is open source under the MIT License.
 

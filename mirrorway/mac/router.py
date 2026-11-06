@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from .. import gestures as G
+from .. import quick
 from ..extend import vd_point
 from ..geometry import OPPOSITE, EdgeGuard, entry_point
-from ..keymap import (FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, MAC_CAPS, MAC_FN, MAC_LOPT,
+from ..keymap import (FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, MAC_CAPS, MAC_FN, MAC_LOPT,
                       MAC_ROPT, KeyTranslator, modifier_is_down)
 from ..protocol import (MSG_BUTTON, MSG_ENTER, MSG_GESTURE, MSG_EXIT, MSG_KEY, MSG_MOVE, MSG_RELEASE_ALL,
                         MSG_SCROLL, MSG_TEXT, pack_button, pack_key, pack_move, pack_scroll)
@@ -129,6 +130,10 @@ class Router:
         self._dock_diag = None
         self._max_fingers = 0
         self._last_swipe_t = -1e9
+        # quick shortcuts (Control + Option + letter): {key code: action}; on_action(action) is called from the
+        # event tap thread and must return quickly
+        self.action_keys: Dict[int, str] = {}
+        self.on_action: Optional[Callable[[str], None]] = None
         self.reload_settings()
 
     # ---- settings ----------------------------------------------------------
@@ -141,6 +146,7 @@ class Router:
                 iso=(layout != "ansi"),
             )
             self._layout_override = None if layout in (None, "auto") else (layout == "iso")
+            self.action_keys = quick.mac_action_keys(self.settings)
 
     def add_listener(self, fn: Callable[[bool], None]) -> None:
         self._listeners.append(fn)
@@ -351,6 +357,14 @@ class Router:
                 return "to_mac"
         return None
 
+    def _quick_action(self, ev: InputEvent) -> Optional[str]:
+        f = ev.flags
+        if self.on_action is None or not (f & FLAG_CONTROL) or not (f & FLAG_OPTION):
+            return None
+        if f & (FLAG_COMMAND | FLAG_SHIFT):
+            return None
+        return self.action_keys.get(ev.keycode)
+
     def _iso(self, ev: InputEvent) -> Optional[bool]:
         if self._layout_override is not None:
             return self._layout_override
@@ -372,6 +386,14 @@ class Router:
         elif hot == "to_mac" and self.remote:
             self._leave(None, notify=True)
             self.swallowed.add(kc)
+            return SUPPRESS
+        action = self._quick_action(ev)
+        if action is not None:
+            self.swallowed.add(kc)               # its release (and Windows) never see it
+            try:
+                self.on_action(action)
+            except Exception:
+                log.exception("quick shortcut %s failed", action)
             return SUPPRESS
 
         if not self.remote:
@@ -593,6 +615,14 @@ class Router:
             if self.remote or not self.sink.connected():
                 return False
             self._enter("center", 0.5)
+            return True
+
+    def leave_to_mac(self) -> bool:
+        """Back to the Mac (the panel's button); the pointer goes to the middle of the main display."""
+        with self.lock:
+            if not self.remote:
+                return False
+            self._leave(None, notify=True)
             return True
 
     def leave_from_client(self, ratio: float, vd: Optional[Tuple[float, float]] = None) -> None:

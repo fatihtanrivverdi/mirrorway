@@ -607,4 +607,74 @@ TR = {
         'Otomatik bulma çalışmıyor (UDP 24851 açılamadı); adresi elle yazın.',
     'Looking for the Mac on the network…':
         'Ağda Mac aranıyor…',
+    'Click Opens the Quick Panel':
+        'Tıklayınca Hızlı Paneli Aç',
+    'Quit':
+        'Çık',
+    'Waiting for Windows…':
+        'Windows bekleniyor…',
+    'Needs attention':
+        'Kontrol edin',
+    'Second screen':
+        'İkinci ekran',
+    'On the Mac':
+        "Mac'te",
+    'On Windows':
+        "Windows'ta",
+    'Permission needed':
+        'İzin gerekiyor',
+    'Turn on Accessibility and Input Monitoring':
+        'Erişilebilirlik ve Girdi İzleme iznini açın',
+    'Off on this network':
+        'Bu ağda kapalı',
+    'Trust this network from Network below':
+        'Aşağıdaki Ağ satırından bu ağa güvenin',
+    'Windows is on':
+        'Windows açık',
+    'Back to the Mac':
+        "Mac'e dön",
+    'Sharing off':
+        'Paylaşım kapalı',
+    'Copy and paste':
+        'Kopyala-yapıştır',
+    'Screen':
+        'Ekran',
+    'Clipboard':
+        'Pano',
+    'Files':
+        'Dosyalar',
+    'Home ✓':
+        'Ev ✓',
+    'Home network':
+        'Ev ağı',
+    'On':
+        'Açık',
+    'Waking… {seconds} s':
+        'Uyanıyor… {seconds} sn',
+    'Connect first':
+        'Önce bağlanın',
+    'Wake the PC':
+        "PC'yi uyandır",
+    'Text and images':
+        'Metin, görsel',
+    'Any network':
+        'Tüm ağlar',
+    'Update {version} available':
+        'Güncelleme hazır: {version}',
+    'You are controlling {name}':
+        '{name} kontrol ediliyor',
+    'This Mac: {address}':
+        'Bu Mac: {address}',
+    'Waiting':
+        'Bekliyor',
+    'Update needed':
+        'Güncellenmeli',
+    'Pairing code: {code}':
+        'Eşleştirme kodu: {code}',
+    'Unknown ⏸':
+        'Bilinmeyen ⏸',
+    'Monitor {n}':
+        'Monitör {n}',
+    '{n} paired':
+        '{n} eşleşmiş',
 }

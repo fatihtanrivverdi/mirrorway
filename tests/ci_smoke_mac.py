@@ -316,7 +316,43 @@ def gesture_events():
     return ", ".join(out)
 
 
+def quick_panel():
+    """The menu bar panel: build it, fill it from sample states, draw it in light and dark appearance and print the
+    images (base64 PNG between markers) so they can be looked at from the CI log."""
+    import base64
+    import io
+
+    from AppKit import NSApplication
+    from PIL import Image
+    from mirrorway import quick
+    from mirrorway.mac.panel import H, W, QuickPanel
+
+    NSApplication.sharedApplication()
+    clicks = []
+    panel = QuickPanel(clicks.append)
+    st = {"connected": True, "remote": False, "client_name": "Home-PC", "rtt_ms": 3.0, "video": True,
+          "video_fps": 58.0, "video_codec": "h264", "network": {"state": "trusted", "allowed": True},
+          "extend": {"desired": False}, "extend_supported": True, "wol": {"mac": "aa"}, "devices": [{"id": "x"}],
+          "audio": {"enabled": True, "active": True, "supported": True}, "pairing": None, "files": None}
+    cfg = {"side": "right", "screen_share": True, "clipboard": True, "file_clipboard": True}
+    sizes = []
+    for name, dark, state in (("light", False, st), ("dark", True, dict(st, remote=True, video=False))):
+        panel.update(quick.mac_panel(state, cfg, version="ci"))
+        png = panel.render_png(dark=dark)
+        img = Image.open(io.BytesIO(png))
+        assert img.size[0] >= W and img.size[1] >= H, img.size
+        sizes.append(f"{name} {img.size[0]}×{img.size[1]}")
+        print(f"----- PANEL PNG {name} -----")
+        print(base64.b64encode(png).decode("ascii"))
+        print(f"----- END PANEL PNG {name} -----")
+    panel._clicked(panel._keys.index("tile:audio"))
+    assert clicks == ["tile:audio"], clicks
+    panel.update(quick.mac_panel({"connected": False, "network": {}}, cfg, permission=False))
+    return ", ".join(sizes)
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
+check("Quick panel (AppKit)", quick_panel)
 check("Keychain", keychain)
 check("Menu bar app modules", app_imports)
 check("TLS: GitHub with the macOS root certificates", tls_roots)

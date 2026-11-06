@@ -163,8 +163,8 @@ jobs:
   report:
     name: Logs (ci-logs branch)
     needs: [linux, macos, windows, release]
-    # on every failed run; on release tags also for the output of the real-platform runs
-    if: ${{ failure() || (always() && startsWith(github.ref, 'refs/tags/v')) }}
+    # on every failed run; on release tags and manual runs also for the output of the real-platform runs
+    if: ${{ failure() || (always() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -175,7 +175,7 @@ jobs:
       REPO: ${{ github.repository }}
       RUN_ID: ${{ github.run_id }}
       ATTEMPT: ${{ github.run_attempt }}
-      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      REAL_LOGS: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Download the logs
         run: |
@@ -186,7 +186,7 @@ jobs:
           python3 - <<'PY'
           import json, os
           jobs = json.load(open("jobs.json"))["jobs"]
-          tag = os.environ.get("IS_TAG") == "true"
+          tag = os.environ.get("REAL_LOGS") == "true"
           with open("failed.txt", "w") as f:
               for j in jobs:
                   real = "real platform" in j["name"] and j.get("conclusion") == "success"
