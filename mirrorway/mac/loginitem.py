@@ -63,3 +63,25 @@ def replace_legacy(bundle: Optional[str]) -> bool:
     if bundle and not is_enabled():
         enable(bundle)
     return True
+
+
+def target() -> Optional[str]:
+    """The app the login item opens."""
+    try:
+        args = plistlib.loads(plist_path().read_bytes()).get("ProgramArguments") or []
+    except Exception:
+        return None
+    return str(args[-1]) if args else None
+
+
+def temporary(bundle: Optional[str]) -> bool:
+    """Running from the disk image, or from where macOS put a downloaded app it has not let move yet."""
+    return bool(bundle) and (bundle.startswith("/Volumes/") or "/AppTranslocation/" in bundle)
+
+
+def follow(bundle: Optional[str]) -> bool:
+    """The login item opens this app (it moved, or the .dmg's app replaced the zip's one). True if it changed."""
+    if not bundle or temporary(bundle) or not is_enabled() or target() == bundle:
+        return False
+    enable(bundle)
+    return True

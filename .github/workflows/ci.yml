@@ -95,6 +95,12 @@ jobs:
           codesign --verify --deep --strict --verbose=2 build/Mirrorway.app
           lipo -archs build/Mirrorway.app/Contents/MacOS/Mirrorway
           python scripts/make_packages.py --app build/Mirrorway.app --out packages
+      # The drag-and-drop download: Mirrorway.app with its own Python (pinned by hash), the pinned packages and the
+      # code, in a .dmg; then copied out and started in a separate home folder (first start, updates)
+      - name: Build the disk image
+        run: python tests/ci_run.py "Disk image" python scripts/build_mac_dmg.py --app build/Mirrorway.app --out packages
+      - name: Try the disk image (copy out, first start, updates)
+        run: python tests/ci_run.py "Disk image test" python tests/ci_dmg_mac.py packages
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packages

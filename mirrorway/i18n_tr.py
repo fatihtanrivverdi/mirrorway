@@ -921,4 +921,6 @@ TR = {
         'Aç',
     'fingerprint {id}':
         'parmak izi {id}',
+    'Mirrorway is running from the disk image or the Downloads folder. Drag it into the Applications folder first, then open it from there.':
+        'Mirrorway disk görüntüsünden ya da İndirilenler klasöründen çalışıyor. Önce Uygulamalar klasörüne sürükleyin, sonra oradan açın.',
 }

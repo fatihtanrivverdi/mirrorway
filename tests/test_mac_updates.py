@@ -253,6 +253,37 @@ def test_install_runs_pip_when_requirements_change(tmp_path, signed):
     assert "# changed" in (root / "requirements-mac.txt").read_text()
 
 
+def test_install_on_the_apps_own_python(tmp_path, signed):
+    """The .dmg's app: new packages go into ~/.mirrorway/venv (on top of the app's Python), never into the bundle,
+    and start.sh is told (venv/.req) to use that environment."""
+    import hashlib
+    root = _installed_tree(tmp_path)
+    src = _fake_app(tmp_path, "9.1.0")
+    (src / "requirements-mac.txt").write_text((src / "requirements-mac.txt").read_text() + "\n# new package\n")
+    data = R.build_app_zip(src)
+    calls = []
+    bundle_py = "/Applications/Mirrorway.app/Contents/Resources/python/bin/python3"
+    prefix = "/Applications/Mirrorway.app/Contents/Resources/python"
+    assert U.bundled_python(prefix) and not U.bundled_python("/opt/homebrew/opt/python@3.14")
+    U.install(data, "9.1.0", root=root, python_exe=bundle_py, runner=_ok_runner(calls), prefix=prefix)
+    venv = root.parent / "venv"
+    made = [a for a in calls if "venv" in a and "-m" in a]
+    assert made and made[0][0] == bundle_py and "--system-site-packages" in made[0]
+    pip = [a for a in calls if "pip" in a]
+    assert pip and pip[0][0] == str(venv / "bin" / "python")          # not the bundle's Python
+    probe = [a for a in calls if "-I" in a]
+    assert probe and probe[0][0] == str(venv / "bin" / "python")
+    want = hashlib.sha1((root / "requirements-mac.txt").read_bytes()).hexdigest()
+    assert (venv / ".req").read_text().strip() == want
+    # the same dependencies: nothing is installed, the app's Python is used as it is
+    calls.clear()
+    (tmp_path / "again").mkdir()
+    src2 = _fake_app(tmp_path / "again", "9.1.0")
+    (src2 / "requirements-mac.txt").write_bytes((root / "requirements-mac.txt").read_bytes())
+    U.install(R.build_app_zip(src2), "9.1.0", root=root, python_exe=bundle_py, runner=_ok_runner(calls), prefix=prefix)
+    assert not any("pip" in a for a in calls)
+
+
 def test_install_failure_leaves_current_version(tmp_path, signed):
     root = _installed_tree(tmp_path)
     data = _release_files(tmp_path, "9.1.0", signed)[R.zip_name("9.1.0")]
@@ -435,3 +466,16 @@ def test_failed_check_backs_off_and_warns_once(caplog):
         t["now"] += U.RETRY_AFTER_FAILURE_S + 1
         assert up.due()
     assert sum("Could not check for updates" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_login_item_follows_the_app(tmp_path, monkeypatch):
+    from mirrorway.mac import loginitem as L
+    monkeypatch.setattr(L.Path, "home", staticmethod(lambda: tmp_path))
+    assert not L.follow("/Applications/Mirrorway.app")                     # off: stays off
+    L.enable(str(tmp_path / "Applications" / "Mirrorway.app"))           # the zip's app (~/Applications)
+    assert L.follow("/Applications/Mirrorway.app") and L.target() == "/Applications/Mirrorway.app"
+    assert not L.follow("/Applications/Mirrorway.app")                     # already right
+    for temp in ("/Volumes/Mirrorway/Mirrorway.app",
+                 "/private/var/folders/x/AppTranslocation/ABC/d/Mirrorway.app"):
+        assert L.temporary(temp) and not L.follow(temp)
+    assert L.target() == "/Applications/Mirrorway.app" and not L.temporary(None)

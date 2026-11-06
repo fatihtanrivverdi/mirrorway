@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.6 — drag-and-drop disk image for the Mac
+- **`Mirrorway-3.1.6-mac.dmg` (Apple silicon):** drag Mirrorway into Applications and open it. The app brings its
+  own Python with the pinned packages, so nothing has to be installed; the first start needs **Open Anyway** once
+  in System Settings (the app is not signed by Apple).
+- The app installs its code to `~/.mirrorway/app` on the first start; updates still go there and keep the
+  permissions. An update that needs a new package adds it beside the app's Python, never inside the app.
+- Opened from the disk image or the Downloads folder, Mirrorway asks to be moved to Applications first. The login
+  item follows the app when it moves.
+- CI builds the disk image and tries it on real macOS: copied out, first start, an older and a newer installed
+  version, an update with new packages.
+- Intel Macs keep the zip package with `install-mac.command`.
+
 ## 3.1.5 — one-click installer for Windows
 - **`Mirrorway-3.1.5-windows-setup.exe`:** double-click and Mirrorway is installed and running; no questions, no
   separate Python (it brings its own, with the pinned packages), no administrator rights (only the optional

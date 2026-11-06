@@ -20,8 +20,10 @@ def download_notes(version: str) -> str:
     return (f"**Windows:** download `Mirrorway-{version}-windows-setup.exe` and double-click it; it installs and "
             "starts Mirrorway (no Python needed). The first time Windows may say \"Windows protected your PC\": "
             "click **More info › Run anyway**.\n\n"
-            f"**Mac:** download `Mirrorway-{version}-mac.zip`, open it and run `install-mac.command` "
-            "(see the README).\n\n"
+            f"**Mac (Apple silicon):** download `Mirrorway-{version}-mac.dmg`, open it and drag Mirrorway into "
+            "Applications, then open it there. The first time macOS may refuse to open it: open **System Settings "
+            "› Privacy & Security** and click **Open Anyway**. Intel Macs: `Mirrorway-{version}-mac.zip` with "
+            "`install-mac.command` (see the README).\n\n"
             "Installed copies update themselves: the Mac from here, Windows from the Mac.")
 
 

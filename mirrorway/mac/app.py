@@ -292,6 +292,11 @@ class MirrorwayMacApp(rumps.App):
                 cfg.set("login_item_set", True)
         except Exception:
             log.exception("Could not replace the old login item")
+        try:
+            if loginitem.follow(self.bundle):
+                log.info("The login item now opens %s", self.bundle)
+        except Exception:
+            log.exception("Could not update the login item")
         if self.bundle and not cfg.get("login_item_set"):
             try:
                 loginitem.enable(self.bundle)
@@ -1135,6 +1140,10 @@ class MirrorwayMacApp(rumps.App):
         self.tap.start()
 
     def start(self) -> None:
+        if loginitem.temporary(self.bundle):
+            rumps.alert(APP_NAME, T("Mirrorway is running from the disk image or the Downloads folder. Drag it into "
+                                    "the Applications folder first, then open it from there."), ok=T("Quit"))
+            raise SystemExit(0)
         port = int(self.cfg.get("port"))
         try:
             self.server.start()

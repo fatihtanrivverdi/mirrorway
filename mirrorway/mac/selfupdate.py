@@ -198,10 +198,32 @@ def _run(args, timeout: float):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
+def bundled_python(prefix: Optional[str] = None) -> bool:
+    """Running on Mirrorway.app's own Python (the .dmg download)? Its packages are part of the signed bundle."""
+    return "/Contents/Resources/python" in (prefix if prefix is not None else sys.prefix)
+
+
+def requirements_python(base: Path, runner: Callable = _run, base_python: Optional[str] = None,
+                        prefix: Optional[str] = None) -> str:
+    """The Python that new packages are installed into. On the app's own Python: ~/.mirrorway/venv, made on top of
+    it (it sees the app's packages and adds only what is new); start.sh then uses that environment."""
+    if not bundled_python(prefix):
+        return base_python or sys.executable
+    venv = Path(base) / "venv"
+    py = venv / "bin" / "python"
+    if not py.exists() or runner([str(py), "-c", ""], timeout=60).returncode != 0:
+        shutil.rmtree(venv, ignore_errors=True)
+        r = runner([base_python or sys.executable, "-m", "venv", "--system-site-packages", str(venv)], timeout=300)
+        if r.returncode != 0:
+            raise UpdateError("Could not create the Python environment: " + (r.stderr or "")[-400:])
+    return str(py)
+
+
 def install(data: bytes, version: str, root: Optional[Path] = None, python_exe: Optional[str] = None,
-            runner: Callable = _run) -> Path:
+            runner: Callable = _run, prefix: Optional[str] = None) -> Path:
     """Installs a verified package; returns the backup folder. On error UpdateError (the installed version stays)."""
     root = Path(root) if root else app_root()
+    given = python_exe
     python_exe = python_exe or sys.executable
     if not (root / "mirrorway").is_dir():
         raise UpdateError(f"Installed code not found: {root}")
@@ -216,10 +238,18 @@ def install(data: bytes, version: str, root: Optional[Path] = None, python_exe: 
         new_req, old_req = stage / REQ_FILE, root / REQ_FILE
         if new_req.exists() and (not old_req.exists() or new_req.read_bytes() != old_req.read_bytes()):
             log.info("Installing new dependencies")
+            python_exe = requirements_python(base, runner, given, prefix)
             r = runner([python_exe, "-m", "pip", "install", "--disable-pip-version-check", "-q",
                         "--require-hashes", "-r", str(new_req)], timeout=900)
             if r.returncode != 0:
                 raise UpdateError("Could not install packages: " + (r.stderr or r.stdout or "")[-400:])
+            if bundled_python(prefix):
+                # start.sh uses this environment from now on (the same check as its own: SHA-1 of the file)
+                import hashlib
+                env_dir = Path(python_exe).parent.parent
+                env_dir.mkdir(parents=True, exist_ok=True)
+                (env_dir / ".req").write_text(
+                    hashlib.sha1(new_req.read_bytes()).hexdigest() + "\n", encoding="ascii")
         probe = ("import sys; sys.path.insert(0, sys.argv[1]); import mirrorway, mirrorway.mac.server, "
                  "mirrorway.mac.selfupdate, mirrorway.release; print(mirrorway.__version__)")
         r = runner([python_exe, "-I", "-c", probe, str(stage)], timeout=120)

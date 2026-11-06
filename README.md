@@ -38,12 +38,9 @@ Mirrorway is written in Python. The Mac side runs on macOS 11 or later (audio ne
 
 ## 1. Installing on the Mac
 
-1. Download **`Mirrorway-<version>-mac.zip`** from the [latest release](https://github.com/fatihtanrivverdi/mirrorway/releases/latest) and open it.
-2. Double-click **`install-mac.command`**. macOS blocks unsigned scripts downloaded from the internet; if it does, open **System Settings › Privacy & Security** and click **Open Anyway** next to it (on macOS 15 right-click › Open no longer works), or type `bash ` in Terminal, drag `install-mac.command` into the window and press Return.
-   - The script installs `~/Applications/Mirrorway.app` and puts the code in `~/.mirrorway/app`.
-   - Python 3 is needed. If `python3 --version` prints nothing in Terminal, install it from [python.org](https://www.python.org/downloads/).
-3. On first start Mirrorway installs its packages (1–2 minutes, a notification appears). Then the **Mirrorway icon** appears in the menu bar.
-4. macOS asks for these permissions. Grant them to **Mirrorway**, then quit Mirrorway and open it again:
+1. Download **`Mirrorway-<version>-mac.dmg`** from the [latest release](https://github.com/fatihtanrivverdi/mirrorway/releases/latest) (Apple silicon: M1 or later), open it and drag **Mirrorway** onto **Applications**.
+2. Open Mirrorway from Applications. The first time macOS refuses because the app is not signed by Apple: open **System Settings › Privacy & Security**, scroll down and click **Open Anyway** next to Mirrorway. This is needed once. The app brings its own Python; nothing else is installed.
+3. macOS asks for these permissions. Grant them to **Mirrorway**, then quit Mirrorway and open it again:
 
 | Permission | Where | What for |
 |---|---|---|
@@ -51,11 +48,11 @@ Mirrorway is written in Python. The Mac side runs on macOS 11 or later (audio ne
 | Input Monitoring | … › Input Monitoring | Reading keystrokes |
 | Screen & System Audio Recording | … › Screen & System Audio Recording | Streaming the Mac's screen and sound to Windows |
 
-5. To pair Windows, choose **Mirrorway › Pair a New Device…** in the menu bar. A 6-digit code appears (valid for 3 minutes, single use). The **This Mac** line in the menu shows the Mac's address.
+4. To pair Windows, click the **Mirrorway icon** in the menu bar and choose **Pair a New Device…**. A 6-digit code appears (valid for 3 minutes, single use).
 
-Mirrorway starts by itself when you log in; turn this off with **Mirrorway › Open at Login**. The app code lives in `~/.mirrorway/app`, so code updates do not change the app's signature and the permissions you granted stay in place.
+Mirrorway starts by itself when you log in (Settings › General › Open at login) and updates itself from the releases here. The app code lives in `~/.mirrorway/app`, so updates do not change the app's signature and the permissions you granted stay in place.
 
-> **From a copy of the source code:** `install-mac.command` builds `Mirrorway.app` itself when it is not next to it; this needs the Xcode command line tools (`xcode-select --install`). `run-mac.command` runs Mirrorway straight from the folder (the permissions then go to Terminal).
+> **Intel Macs, or without the disk image:** download `Mirrorway-<version>-mac.zip`, open it and run `install-mac.command`; it installs `~/Applications/Mirrorway.app` and uses a Python 3 installed on the Mac ([python.org](https://www.python.org/downloads/)). macOS blocks unsigned scripts downloaded from the internet: click **Open Anyway** in **System Settings › Privacy & Security**, or type `bash ` in Terminal, drag `install-mac.command` into the window and press Return. In a copy of the source code, `install-mac.command` builds `Mirrorway.app` itself (needs `xcode-select --install`); `run-mac.command` runs Mirrorway straight from the folder.
 
 ## 2. Installing on Windows
 
@@ -70,7 +67,7 @@ Later versions arrive by themselves: the Mac sends them to Windows when it conne
 
 ### Moving over from Köprü
 
-Mirrorway was called Köprü until version 2.8. The installers above replace it on both computers: Köprü is closed and removed, and its settings and pairing are carried over on first start, so there is no need to pair again. On the Mac, grant the permissions to Mirrorway and remove Köprü from the three permission lists.
+Mirrorway was called Köprü until version 2.8. The downloads above replace it on both computers: Köprü is closed and removed, and its settings and pairing are carried over on first start, so there is no need to pair again. On the Mac, grant the permissions to Mirrorway and remove Köprü from the three permission lists.
 
 ## 3. Using Mirrorway
 
