@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="240 240 544 544" width="544" height="544">
+  <title>Mirrorway (monochrome)</title>
+  <path d="M 300 512 L 300 296 L 512 468 L 724 296 L 724 512" fill="none" stroke="#000" stroke-width="68"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 300 532 L 300 728 L 512 556 L 724 728 L 724 532" fill="none" stroke="#000" stroke-width="68"
+        stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+</svg>

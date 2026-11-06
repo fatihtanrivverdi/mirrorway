@@ -1,0 +1,218 @@
+# Mirrorway CI
+#  - On every push (main) and pull request: pyflakes and the tests on Linux with Python 3.12 (the Windows app's
+#    version) and 3.14 (the Mac app's version); on 3.12 also a smoke test of the Windows interface with fake
+#    Windows APIs (Xvfb).
+#  - When started by hand (Actions › CI › Run workflow) and on release tags (v*): also tries on real macOS
+#    (VideoToolbox, Keychain) and real Windows (DPAPI, SDL2, D3D11VA), and the macOS job builds Mirrorway.app and
+#    the download packages. These are slower, so they do not run on every push.
+#  - On a release tag, once the tests pass: the signed update package and the download packages are published on
+#    GitHub Releases (the release job).
+# Dependencies are pinned by version + SHA-256 hash; actions are pinned by commit hash.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Also run on real macOS and Windows"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUTF8: "1"
+
+jobs:
+  linux:
+    name: Linux (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System packages (Xvfb)
+        run: sudo apt-get update -q && sudo apt-get install -y -q xvfb xauth
+      - name: Dependencies (pinned version + hash)
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-ci-linux.txt -r requirements-dev.txt
+      - name: pyflakes
+        run: python tests/ci_run.py "pyflakes" python -m pyflakes mirrorway tests scripts macapp
+      - name: Tests
+        run: python tests/ci_run.py "Tests" python -m pytest -q -rfE --tb=short tests
+      # The Windows app runs on Python 3.12, so the interface smoke tests run on 3.12 only
+      - name: Windows interface smoke test (SDL + H.264, device key)
+        if: matrix.python == '3.12'
+        env:
+          SDL_VIDEODRIVER: x11
+        run: python tests/ci_run.py --retry 1 "SDL smoke test" xvfb-run -a python tests/gui_smoke_windows.py sdl h264 pair
+      - name: Windows interface smoke test (Tk + JPEG, old code)
+        if: matrix.python == '3.12'
+        run: python tests/ci_run.py --retry 1 "Tk smoke test" xvfb-run -a python tests/gui_smoke_windows.py tk jpeg legacy
+
+  macos:
+    name: macOS (real platform)
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.platforms) || startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Dependencies (the same pinned file as the Mac app)
+        run: python -m pip install --require-hashes -r requirements-mac.txt -r requirements-dev.txt
+      - name: Tests
+        run: python tests/ci_run.py --retry 1 "Tests" python -m pytest -q -rfE --tb=short tests
+      - name: macOS smoke test (VideoToolbox, Keychain, network identity)
+        if: ${{ !cancelled() }}
+        run: python tests/ci_run.py "macOS smoke test" python tests/ci_smoke_mac.py
+      # Mirrorway.app: the launcher is compiled from macapp/launcher.c (universal) and signed ad hoc
+      - name: Build Mirrorway.app and the download packages
+        run: |
+          python tests/ci_run.py "Mirrorway.app" /usr/bin/python3 macapp/build_app.py build
+          codesign --verify --deep --strict --verbose=2 build/Mirrorway.app
+          lipo -archs build/Mirrorway.app/Contents/MacOS/Mirrorway
+          python scripts/make_packages.py --app build/Mirrorway.app --out packages
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: packages/
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows (real platform)
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.platforms) || startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Dependencies (the same pinned file as the Windows app)
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-windows.txt -r requirements-dev.txt
+      - name: Tests
+        run: python tests/ci_run.py --retry 1 "Tests" python -m pytest -q -rfE --tb=short tests
+      - name: Windows smoke test (DPAPI, H.264, SDL2)
+        if: ${{ !cancelled() }}
+        run: python tests/ci_run.py "Windows smoke test" python tests/ci_smoke_windows.py
+
+  # On a release tag (v*), after all the tests pass: the update package is built, signed with Ed25519 using the
+  # secret key in CI (MIRRORWAY_SIGNING_KEY) and published on GitHub Releases together with the download packages
+  # built by the macOS job. Mirrorway on the Mac only installs packages verified with the public key embedded in
+  # its code. The signing key is given only to the signing step; the upload step sees only GITHUB_TOKEN.
+  release:
+    name: Release (signed package)
+    needs: [linux, macos, windows]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Dependencies (pinned version + hash)
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-release.txt
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: dist
+      - name: Build and sign the update package
+        env:
+          MIRRORWAY_SIGNING_KEY: ${{ secrets.MIRRORWAY_SIGNING_KEY }}
+        run: python scripts/make_release.py --tag "$GITHUB_REF_NAME" --out dist
+      - name: Publish on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_release.py --tag "$GITHUB_REF_NAME" --dir dist
+
+  # GitHub serves job logs from a storage address that the maintainer's tools cannot reach, so the logs of failed
+  # jobs are also written to the "ci-logs" branch (overwritten each time). This job runs no repository code and
+  # no outside actions; it only downloads the logs from the GitHub API and pushes them to that branch with git.
+  report:
+    name: Logs (ci-logs branch)
+    needs: [linux, macos, windows, release]
+    # on every failed run; on release tags also for the output of the real-platform runs
+    if: ${{ failure() || (always() && startsWith(github.ref, 'refs/tags/v')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.run_id }}
+      ATTEMPT: ${{ github.run_attempt }}
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - name: Download the logs
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/logs" && cd "$RUNNER_TEMP/logs"
+          api() { curl -sSfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO$1"; }
+          api "/actions/runs/$RUN_ID/attempts/$ATTEMPT/jobs?per_page=50" > jobs.json
+          python3 - <<'PY'
+          import json, os
+          jobs = json.load(open("jobs.json"))["jobs"]
+          tag = os.environ.get("IS_TAG") == "true"
+          with open("failed.txt", "w") as f:
+              for j in jobs:
+                  real = "real platform" in j["name"] and j.get("conclusion") == "success"
+                  if j.get("conclusion") == "failure" or (tag and real):
+                      f.write(f"{j['id']}\t{j['name']}\n")
+          with open("SUMMARY.md", "w") as f:
+              f.write(f"# CI run {jobs[0]['run_id'] if jobs else ''}\n\n")
+              for j in jobs:
+                  f.write(f"- {j['name']}: {j.get('conclusion') or j.get('status')}\n")
+                  for s in j.get("steps", []):
+                      if s.get("conclusion") == "failure":
+                          f.write(f"  - failed step: {s['name']}\n")
+          PY
+          while IFS=$'\t' read -r id name; do
+            safe=$(printf '%s' "$name" | tr -c 'A-Za-z0-9.-' '_')
+            api "/actions/jobs/$id/logs" > "$safe.log" || echo "could not download" > "$safe.log"
+          done < failed.txt
+          rm -f jobs.json failed.txt
+          ls -la
+      - name: Push to the ci-logs branch
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/logs"
+          git init -q -b ci-logs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "CI logs: run $RUN_ID (attempt $ATTEMPT)"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" ci-logs

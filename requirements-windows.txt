@@ -1,0 +1,46 @@
+# Mirrorway — Windows dependencies
+# Versions and SHA-256 hashes are pinned: pip installs exactly these packages
+# (even if a package is replaced on PyPI). To update: scripts/pin_requirements.py
+
+pillow==13.0.0 \
+    --hash=sha256:567f20f1c75897d7663830da6ea8af719e03d712b1d9ee7f813319f9ece42e5a \
+    --hash=sha256:73ee25cf8cf8b75d5a5aeed7cb6588f5e5dbfbb0fde51707b630bbb23897645c \
+    --hash=sha256:cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510 \
+    --hash=sha256:ff3fe9eb621fbb9db4c4be33ab946f6bac5f98ab50ca8d3260503653656c961b
+pystray==0.19.5 \
+    --hash=sha256:a0c2229d02cf87207297c22d86ffc57c86c227517b038c0d3c59df79295ac617
+six==1.17.0 \
+    --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
+    --hash=sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81
+pyperclip==1.11.0 \
+    --hash=sha256:244035963e4428530d9e3a6101a1ef97209c6825edab1567beac148ccc1db1b6 \
+    --hash=sha256:299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273
+cryptography==50.0.2 \
+    --hash=sha256:4e81d95e5bafc2d6e34e4bed780e53e4d5b9a2f928573428aa4d35fbec1eb0de \
+    --hash=sha256:7afa5a6602a9f29af1f3a2965f831bae7c9d5d597b7cbb716d41ab3b7d89879c \
+    --hash=sha256:7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5 \
+    --hash=sha256:7b75de3c8b3be1cdb1052747c929440c3eea46c1bc2cb8a6e3a48388e9b7b452
+cffi==2.1.1 \
+    --hash=sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be \
+    --hash=sha256:f53e442b08449d42821fa4a4fba000095af9f62742a500f978a9f557ec44339a
+pycparser==3.12 \
+    --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e \
+    --hash=sha256:f03387877eab82ce01bbdfd0ba7252ee55a90b1c708d5129e2ce915475cf1db6
+numpy==2.5.4 \
+    --hash=sha256:9a94cf751c9ad8ebaa835bcd3d40dacf8534ad086b88c38029b65123c7999d2a \
+    --hash=sha256:a7b1b6353e36a7e50de2973a38d705c88ee93adcf120673cee7f45a4a3fa223a
+simplejpeg==1.9.0 \
+    --hash=sha256:5ac7d9489eeb812c2e7ea5c283994a29d9fefdfe5ed7b86c09d485e0dd366689 \
+    --hash=sha256:808b6840f1c6d4de20ae7a086cf9bf49eccac6ef6658df34b4948e071cbe9680
+av==19.0.2 \
+    --hash=sha256:3ce5a1d7b916d13c16ac58f1756f0fee4af2d53f02bc1403e18550b50d375a22 \
+    --hash=sha256:bebbc52598886480f4d861c575dc2b020785d6c04e1308680ddcc545e1b94c66
+pysdl2==0.9.17 \
+    --hash=sha256:48c6ef01a4eb123db5f7e46e1a1b565675755b07e615f3fe20a623c94735b52b \
+    --hash=sha256:fe923dbf5c7b27bbc1eb2bf58abfa793f8f13fd7ae8b27b1bc2de49920bcbd41
+pysdl2-dll==2.32.10 \
+    --hash=sha256:65eba83d68c33b22aa5eca6c9a8521cff5044435ecd5b49521068df82674de6a \
+    --hash=sha256:ad83e0e1a0227633495d6b3ec6701ac5a2beac44e6692f52278033bda1313717
+spake2==0.9 \
+    --hash=sha256:2d7cbe936519c4172866649ddceefdec08e3d9b3ce4c8a75bbf84d6bdd07a2fb \
+    --hash=sha256:421fc4a8d5ac395af7af0206ffd9e6cdf188c105cb1b883d9d683312bb5a9334

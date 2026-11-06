@@ -1,0 +1,6 @@
+# Windows scripts and binary files are stored as they are (no line ending conversion)
+*.bat -text
+*.ps1 -text
+*.ico binary
+*.icns binary
+*.png binary
