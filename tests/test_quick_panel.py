@@ -207,3 +207,36 @@ def test_pairing_and_update_rows():
     assert p.row("pair").title == "Pairing code: 123 456" and p.row("pair").detail == "4:32"
     assert p.update == "3.1.1" and p.footer == "Update 3.1.1 available"
     assert Q.mac_panel(status(network={}), cfg()).row("network").detail == "—"
+
+
+# ---- Windows tray panel -------------------------------------------------------------------------------------------
+def test_win_panel_connected_and_remote():
+    c = cfg(clipboard=True)
+    p = Q.win_panel(state="connected", status_text="Connected to MacBook-Pro", cfg=c, mac_name="MacBook-Pro",
+                    viewer=True, rtt_ms=3.2, fps=58.4, audio_supported=True, audio_on=True, version="3.1.2")
+    assert p.header.subtitle == "Connected to MacBook-Pro" and p.header.state == "connected"
+    assert p.header.title == "The Mac's keyboard and mouse can reach this PC"
+    assert p.header.detail == "Push the Mac's pointer against its right edge · 3 ms · 58 fps"
+    assert (p.primary.action, p.primary.title, p.primary.shortcut, p.primary.enabled) == \
+        ("hide_screen", "Hide the Mac's screen", "Ctrl+Alt+S", True)
+    assert [t.key for t in p.tiles] == ["clipboard", "audio", "files", "reconnect", "pair", "diag"]
+    assert p.tile("audio").on and p.tile("audio").enabled and p.tile("clipboard").on and p.tile("files").on
+    assert p.footer == "Mirrorway 3.1.2"
+    p = Q.win_panel(state="connected", status_text="", cfg=cfg(shortcuts={"screen": ""}), remote=True, side="left")
+    assert p.header.state == "remote" and p.header.title == "The Mac's keyboard and mouse are on this PC"
+    assert p.header.detail == "Push the pointer against the right edge to go back to the Mac"
+    assert p.primary.action == "show_screen" and p.primary.shortcut == ""
+    assert p.tile("audio").detail == "Update needed" and not p.tile("audio").enabled
+
+
+def test_win_panel_not_connected():
+    p = Q.win_panel(state="idle", status_text="Looking for the Mac on the network…",
+                    cfg=cfg(clipboard=False, file_clipboard=False), reconnecting=True)
+    assert p.header.state == "waiting" and p.header.subtitle == "Looking for the Mac on the network…"
+    assert not p.primary.enabled and p.primary.action == "show_screen"
+    assert not p.tile("clipboard").on and not p.tile("files").on and p.tile("audio").detail == "Off"
+    r = p.tile("reconnect")
+    assert r.on and not r.enabled and r.detail == "Connecting…"
+    assert Q.win_panel(state="unpaired", status_text="x", cfg=cfg()).header.state == "permission"
+    assert Q.win_panel(state="error", status_text="refused", cfg=cfg()).header.detail == "refused"
+    assert Q.win_shortcut_letters(cfg(shortcuts={"screen": "K"})) == {"screen": "k"}

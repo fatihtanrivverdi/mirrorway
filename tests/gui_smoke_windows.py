@@ -171,7 +171,39 @@ def step2():
               and "Paired Mac" in app.settings_win.pair_var.get())
     check("tray menu updated", app.icon.updates > 0)
     check("status text", "Connected" in app.status_text)
-    app.icon.click("Show the Mac's Screen")
+    default = [it for it in app.icon.menu.items if getattr(it, "default", False)]
+    check("left click opens the panel", len(default) == 1 and default[0].text == "Open Mirrorway")
+    app.icon.click("Open Mirrorway")
+    when(lambda: app.panel is not None and app.panel.is_shown(), step2b, timeout_ms=5000)
+
+
+def step2b():
+    p = app.panel
+    check("panel opened", p is not None and p.is_shown())
+    m = p.model
+    check("panel: connected", m is not None and m.header.state == "connected" and "Connected to" in m.header.subtitle)
+    check("panel: drawn", len(p.canvas.find_all()) > 20)
+    clip = bool(cfg.get("clipboard"))
+    p.click("tile:clipboard")
+    check("panel: clipboard tile", bool(cfg.get("clipboard")) == (not clip) and p.model.tile("clipboard").on == (not clip))
+    p.click("tile:clipboard")
+    p.click("tile:files")
+    check("panel: files tile", cfg.get("file_clipboard") is False and not p.model.tile("files").on)
+    p.click("tile:files")
+    check("panel: the Mac accepts actions", app.control.can_ask_mac() and p.model.tile("audio").enabled)
+    before = bool(mcfg.get("audio"))
+    p.click("tile:audio")
+    when(lambda: bool(mcfg.get("audio")) != before, step2c, timeout_ms=5000)
+
+
+def step2c():
+    p = app.panel
+    check("panel: audio tile changes the Mac's setting", bool(mcfg.get("audio")) is True)
+    mcfg.set("audio", False)
+    server.send_audio_state()
+    p.hide()
+    check("panel hides", not p.is_shown())
+    p.click("primary")                         # Show the Mac's screen
     when(_viewer_ready, step3)
 
 
@@ -273,6 +305,10 @@ def step5():
 def step6():
     check("screen window closed by the Mac", app.viewer is None)
     check("video connection closed", app.video is None)
+    app.hotkey_action("screen")                # Control + Alt + S
+    check("shortcut opens the screen window", app.viewer is not None and not app.viewer.closed)
+    app.hotkey_action("screen")
+    check("shortcut closes it again", app.viewer is None)
     import mirrorway.win.app as appmod
     launched = []
     appmod.subprocess.Popen = lambda cmd, **kw: launched.append((cmd, kw))

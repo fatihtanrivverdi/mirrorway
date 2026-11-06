@@ -31,8 +31,8 @@ def build_windows_bundle(root: Optional[Path] = None) -> Tuple[str, bytes, str]:
         return _cache[key]
     pkg = root / "mirrorway"
     files = []
-    # the code, plus the icons (the Windows shortcuts point at mirrorway/assets/mirrorway.ico)
-    for p in sorted(list(pkg.rglob("*.py")) + list((pkg / "assets").glob("*.ico"))):
+    # the code, plus the icons (the Windows shortcuts point at mirrorway/assets/mirrorway.ico) and the logo (panel)
+    for p in sorted(list(pkg.rglob("*.py")) + list((pkg / "assets").glob("*.ico")) + [pkg / "assets" / "logo.png"]):
         rel = p.relative_to(root)
         parts = rel.parts
         if "__pycache__" in parts or (len(parts) > 1 and parts[1] == "mac"):

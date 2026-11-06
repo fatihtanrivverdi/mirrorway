@@ -1256,6 +1256,7 @@ class MirrorwayMacApp(rumps.App):
         self._refresh_extend(st)
         self.mi_files_state.title = self._files_text(st.get("files"))
         self.mi_audio_state.title = self._audio_text(st.get("audio"), bool(st.get("connected")))
+        self.mi_audio.state = int(bool(self.cfg.get("audio")))      # Windows' panel can change it too
         ev = self.server.file_event
         if ev is not None:
             self.server.file_event = None

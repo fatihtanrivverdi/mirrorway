@@ -70,6 +70,9 @@ WIN_DEFAULTS = {
     "overlay_fullscreen": True, # stats in the top right corner in full screen (toggle with F9)
     "overlay_window": False,    # stats box in windowed mode (the title bar already shows them)
     "overlay_extend": False,    # stats box on the second screen (over the Mac desktop; off by default)
+    "file_clipboard": True,     # copied files go to the Mac and back (the Files tile)
+    "quick_panel": True,        # clicking the tray icon opens the panel (False: the screen window, as before 3.1.2)
+    "shortcuts": {"screen": "s"},   # Control + Alt + letter: show or hide the Mac's screen
 }
 
 # Settings renamed in 3.0: old key -> new key, and old values -> new values

@@ -220,7 +220,67 @@ def app_imports():
     return None
 
 
+def hotkeys():
+    """RegisterHotKey on a thread of its own: Control + Alt + S registers (or is reported as taken) and the loop
+    stops cleanly."""
+    from mirrorway.win.hotkeys import Hotkeys
+    hk = Hotkeys({"screen": "s"}, lambda a: None)
+    hk.start()
+    assert hk.ready.wait(5), "the shortcut thread did not start"
+    t = hk._thread
+    hk.stop()
+    t.join(5)
+    assert not t.is_alive(), "the shortcut thread did not stop"
+    return f"registered {hk.registered}, taken {hk.failed}"
+
+
+def tray_panel():
+    """The tray panel (Tk) in light and dark theme; printed as PNG (base64) for a look from the CI log."""
+    import base64
+    import io
+    import time
+    import tkinter as tk
+
+    from PIL import ImageGrab
+    from mirrorway import quick
+    from mirrorway.win import panel as P
+    from mirrorway.win import winapi
+    winapi.set_dpi_aware()
+    root = tk.Tk()
+    root.withdraw()
+    out = []
+    try:
+        for theme in ("light", "dark"):
+            os.environ["MIRRORWAY_THEME"] = theme
+            clicks = []
+            p = P.TrayPanel(root, clicks.append)
+            p.model = quick.win_panel(state="connected", status_text="", cfg=Cfg(clipboard=True),
+                                      mac_name="MacBook-Pro", rtt_ms=3.0, audio_supported=True, audio_on=True)
+            p.show()
+            for _ in range(15):
+                root.update()
+                time.sleep(0.05)
+            assert p.is_shown(), "the panel did not show"
+            x, y = p.top.winfo_rootx(), p.top.winfo_rooty()
+            img = ImageGrab.grab(bbox=(x, y, x + p.px(P.W), y + p.height))
+            b = io.BytesIO()
+            img.save(b, "PNG")
+            print(f"----- WINPANEL PNG {theme} -----")
+            print(base64.b64encode(b.getvalue()).decode("ascii"))
+            print(f"----- END WINPANEL PNG {theme} -----")
+            p.click("tile:files")
+            assert clicks == ["tile:files"], clicks
+            out.append(f"{theme} {img.size[0]}×{img.size[1]} (scale {p.scale:g}, icons {p.icon_family})")
+            p.top.destroy()
+    finally:
+        os.environ.pop("MIRRORWAY_THEME", None)
+        root.destroy()
+    return ", ".join(out)
+
+
 check("DPAPI", dpapi)
+check("Shortcuts (RegisterHotKey)", hotkeys)
+check("Tray panel (Tk)", tray_panel)
 check("H.264 encoding + decoding", h264)
 check("SDL2 window and YUV texture", sdl)
 check("Rich clipboard (Win32)", clipboard)

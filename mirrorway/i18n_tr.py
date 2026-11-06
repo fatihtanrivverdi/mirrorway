@@ -825,4 +825,48 @@ TR = {
         '{version} sürümünü kur ve yeniden başlat',
     'Return to the previous version ({version})':
         'Önceki sürüme dön ({version})',
+    "Push the Mac's pointer against its right edge":
+        "Mac'te imleci ekranın sağ kenarına itin",
+    "Push the Mac's pointer against its left edge":
+        "Mac'te imleci ekranın sol kenarına itin",
+    "Push the Mac's pointer against its top edge":
+        "Mac'te imleci ekranın üst kenarına itin",
+    "Push the Mac's pointer against its bottom edge":
+        "Mac'te imleci ekranın alt kenarına itin",
+    "The Mac's keyboard and mouse are on this PC":
+        "Mac'in klavyesi ve faresi bu bilgisayarda",
+    "The Mac's keyboard and mouse can reach this PC":
+        "Mac'in klavyesi ve faresi bu bilgisayara geçebilir",
+    "Hide the Mac's screen":
+        'Mac ekranını gizle',
+    "Show the Mac's screen":
+        'Mac ekranını göster',
+    "Mac's sound":
+        "Mac'in sesi",
+    'Pair a Mac':
+        'Mac eşleştir',
+    'Diagnostics':
+        'Tanı',
+    'Push the pointer against the left edge to go back to the Mac':
+        "Mac'e dönmek için imleci sol kenara itin",
+    'Push the pointer against the right edge to go back to the Mac':
+        "Mac'e dönmek için imleci sağ kenara itin",
+    'Push the pointer against the bottom edge to go back to the Mac':
+        "Mac'e dönmek için imleci alt kenara itin",
+    'Push the pointer against the top edge to go back to the Mac':
+        "Mac'e dönmek için imleci üst kenara itin",
+    'Not paired with a Mac':
+        'Bir Mac ile eşleşmedi',
+    'Click Pair a Mac and enter the code shown on the Mac':
+        "Mac eşleştir'e tıklayın ve Mac'te görünen kodu girin",
+    'Cannot reach the Mac':
+        "Mac'e ulaşılamıyor",
+    'Not connected':
+        'Bağlı değil',
+    'Waiting for the Mac…':
+        'Mac bekleniyor…',
+    'Mirrorway connects by itself when the Mac is on the same network':
+        'Mac aynı ağdayken Mirrorway kendiliğinden bağlanır',
+    'Open Mirrorway':
+        "Mirrorway'i aç",
 }

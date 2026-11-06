@@ -136,9 +136,13 @@ While Windows sleeps, **Mirrorway › Wake Windows** wakes it from the Mac. The 
   - In the BIOS/UEFI, turn on *Wake on LAN / Power on by PCI-E*.
 - The settings Windows reports are written to the Mac log as a "Wake-on-LAN note". If waking fails, Mirrorway shows the missing setting there and in the warning window.
 
+### The Windows tray panel
+
+**Left-click** the Mirrorway icon in the Windows tray to open the panel above it: the connection status and which edge of the Mac's screen leads here, **Show the Mac's screen** / **Hide the Mac's screen** (`Ctrl + Alt + S` anywhere), and tiles for **Clipboard**, **Mac's sound** (turns the audio transfer on the Mac on or off), **Files**, **Reconnect**, **Pair a Mac** and **Diagnostics**. It follows the Windows light or dark app theme and closes when you click elsewhere or press Esc. Right-click the icon for the menu.
+
 ### Watching the Mac's screen on Windows
 
-**Left-click** the tray icon, or right-click › **Show the Mac's Screen**. In the window, **F11** or a **double-click** switches to full screen and **Esc** leaves it. In full screen the measurements (fps, bandwidth, target bitrate, latency) appear in the top right corner; **F9** shows or hides them. Choose the picture quality and which Mac display is shared in the Mac's menu.
+Click **Show the Mac's screen** in the tray panel, press `Ctrl + Alt + S`, or right-click the tray icon › **Show the Mac's Screen**. On the Mac, `⌃⌥S` or the **Screen** tile opens and closes it too. In the window, **F11** or a **double-click** switches to full screen and **Esc** leaves it. In full screen the measurements (fps, bandwidth, target bitrate, latency) appear in the top right corner; **F9** shows or hides them. Choose the picture quality and which Mac display is shared in the Mac's menu.
 
 The window draws with the graphics card (Direct3D 11), and the graphics card also decodes H.264 when it can. If these are not available, Mirrorway falls back to the window that decodes and draws on the processor (force it with `"viewer": "tk"` in `%USERPROFILE%\.mirrorway\windows.json`).
 
@@ -272,7 +276,7 @@ mirrorway/
                            panel.py + settings.py (quick panel, Settings window), vdisplay.py,
                            extend_mgr.py (second screen life cycle)
   win/                     remote.py (input logic), backend.py + winapi.py (SendInput), client.py, sdlview.py,
-                           viewer.py, app.py (Tk + pystray)
+                           viewer.py, app.py (Tk + pystray), panel.py (tray panel), hotkeys.py (Ctrl+Alt shortcuts)
 macapp/                    Mirrorway.app launcher (launcher.c), start.sh, build_app.py, icon
 assets/                    logo
 scripts/                   release and packaging scripts

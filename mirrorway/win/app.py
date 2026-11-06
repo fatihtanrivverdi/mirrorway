@@ -14,6 +14,7 @@ from tkinter import ttk
 from PIL import Image, ImageDraw
 
 from .. import APP_NAME, __version__
+from .. import quick
 from ..clipsync import ClipboardSync
 from ..config import CONFIG_DIR
 from ..discovery import Listener
@@ -90,6 +91,9 @@ class WinApp:
         self.video = None
         self.settings_win = None
         self.icon = None
+        self.panel = None
+        self.hotkeys = None
+        self._reconnect_until = 0.0
 
         self.discovery = Listener()
         self.discovery.start()
@@ -210,10 +214,13 @@ class WinApp:
     def _build_tray(self):
         import pystray
         M = pystray.MenuItem
+        panel = bool(self.cfg.get("quick_panel", True))
         menu = pystray.Menu(
             M(lambda item: self.status_text, lambda icon, item: None, enabled=False),
             pystray.Menu.SEPARATOR,
-            M(T("Show the Mac's Screen"), lambda icon, item: self._post(self.toggle_viewer), default=True),
+            # a left click on the icon runs the default item: the panel (or the screen window without the panel)
+            M(T("Open Mirrorway"), lambda icon, item: self._post(self.toggle_panel), default=panel, visible=panel),
+            M(T("Show the Mac's Screen"), lambda icon, item: self._post(self.toggle_viewer), default=not panel),
             M(T("Settings…"), lambda icon, item: self._post(self.open_settings)),
             M(T("Clipboard Sync"), lambda icon, item: self._post(self._toggle_clip),
               checked=lambda item: bool(self.cfg.get("clipboard"))),
@@ -239,6 +246,92 @@ class WinApp:
     def _toggle_clip(self) -> None:
         self.cfg.set("clipboard", not bool(self.cfg.get("clipboard")))
         self._refresh_icon()
+
+    # ---- tray panel and shortcuts ---------------------------------------------
+    def panel_model(self) -> "quick.Panel":
+        v = self.viewer
+        viewer_open = v is not None and not v.closed
+        fps = 0.0
+        if viewer_open:
+            try:
+                fps = float((v.stats() or {}).get("fps") or 0.0)
+            except Exception:
+                fps = 0.0
+        c = self.control
+        return quick.win_panel(state=self.state, status_text=self.status_text, cfg=self.cfg,
+                               mac_name=c.server_name or self.creds.mac_name() or "", remote=self.remote.active,
+                               viewer=viewer_open, side=getattr(c, "server_side", "right"), rtt_ms=c.last_rtt_ms,
+                               fps=fps, audio_supported=c.can_ask_mac(), audio_on=c.audio_on,
+                               reconnecting=time.monotonic() < self._reconnect_until)
+
+    def toggle_panel(self) -> None:
+        if self.panel is None:
+            from .panel import TrayPanel
+            self.panel = TrayPanel(self.root, self.panel_action)
+        self.panel.model = self.panel_model()
+        was = self.panel.is_shown()
+        self.panel.toggle()
+        if not was and self.panel.is_shown():
+            self.root.after(1000, self._panel_tick)
+
+    def _panel_tick(self) -> None:
+        p = self.panel
+        if p is None or not p.is_shown():
+            return
+        p.update(self.panel_model())
+        self.root.after(1000, self._panel_tick)
+
+    def panel_action(self, key: str) -> None:
+        log.info("Panel: %s", key)
+        c = self.control
+        if key == "primary":
+            self.toggle_screen()
+        elif key == "tile:clipboard":
+            self._toggle_clip()
+        elif key == "tile:files":
+            self.cfg.set("file_clipboard", not bool(self.cfg.get("file_clipboard", True)))
+        elif key == "tile:audio":
+            c.ask_mac({"audio": not c.audio_on})
+        elif key == "tile:reconnect":
+            self._reconnect_until = time.monotonic() + 3.0
+            c.kick()
+        elif key in ("tile:pair", "settings"):
+            if self.panel is not None:
+                self.panel.hide()
+            self.open_settings()
+        elif key == "tile:diag":
+            self.make_diag()
+        elif key == "quit":
+            self.quit()
+            return
+        if self.panel is not None:
+            self.panel.update(self.panel_model())
+            if key == "tile:audio":                 # the Mac answers with the new state
+                self.root.after(600, lambda: self.panel.update(self.panel_model()) if self.panel else None)
+
+    def toggle_screen(self) -> None:
+        """Show or hide the Mac's screen (the panel's button and Control + Alt + S)."""
+        v = self.viewer
+        if v is not None and not v.closed:
+            self.close_viewer("from the panel or the shortcut")
+        else:
+            self.toggle_viewer()
+
+    def close_viewer(self, reason: str) -> None:
+        v = self.viewer
+        if v is not None and not v.closed:
+            self._close_reason = reason
+            v.close()
+
+    def hotkey_action(self, action: str) -> None:
+        log.info("Shortcut: %s", action)
+        if action == "screen":
+            self.toggle_screen()
+
+    def _start_hotkeys(self) -> None:
+        from .hotkeys import Hotkeys
+        self.hotkeys = Hotkeys(quick.win_shortcut_letters(self.cfg), lambda a: self._post(self.hotkey_action, a))
+        self.hotkeys.start()
 
     # ---- screen viewer --------------------------------------------------
     def toggle_viewer(self) -> None:
@@ -295,8 +388,7 @@ class WinApp:
             self.toggle_viewer()
         elif req.get("open") is False and is_open:
             log.info("The Mac had the screen window closed")
-            self._close_reason = "by the Mac"
-            self.viewer.close()
+            self.close_viewer("by the Mac")
 
     def _on_video_info(self, info: dict) -> None:
         """From the video thread: if the second screen is on, the window goes full screen on that monitor."""
@@ -385,6 +477,8 @@ class WinApp:
     def run(self) -> None:
         self._build_tray()
         self.control.start()
+        if sys.platform == "win32":
+            self._start_hotkeys()
         self.root.after(50, self._drain)
         if not (self.creds.paired() or self.creds.legacy_code()):
             self.root.after(300, self.open_settings)
@@ -414,6 +508,8 @@ class WinApp:
 
     def quit(self) -> None:
         try:
+            if self.hotkeys is not None:
+                self.hotkeys.stop()
             self.remote.on_exit()
             self.control.stop()
             if self.video is not None:

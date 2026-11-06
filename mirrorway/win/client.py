@@ -21,7 +21,7 @@ from .. import richclip as RC
 from ..extend import FEATURE as EXTEND_FEATURE
 from ..gestures import FEATURE as GESTURES_FEATURE
 from ..i18n import T
-from ..protocol import (MSG_BUTTON, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_ENTER, MSG_EXIT, MSG_GESTURE,
+from ..protocol import (ACTIONS_FEATURE, MSG_ACTION, MSG_BUTTON, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_ENTER, MSG_EXIT, MSG_GESTURE,
                         MSG_FRAME, MSG_FRAME2, MSG_HELLO, MSG_KEY, MSG_MOVE, MSG_PING, MSG_RELEASE_ALL,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LOG, MSG_SCROLL, MSG_STATS, MSG_TEXT,
                         MSG_UPDATE,
@@ -198,6 +198,7 @@ class ControlClient(threading.Thread):
         self.ch = None
         self.server_name = ""
         self.server_version = ""
+        self.server_side = "right"
         self.last_rtt_ms: Optional[float] = None
         self.on_update = on_update
         self.install_root = Path(install_root) if install_root else Path(__file__).resolve().parent.parent.parent
@@ -241,6 +242,25 @@ class ControlClient(threading.Thread):
 
     def server_features(self) -> list:
         return list(self._server_features) if self.ch is not None else []
+
+    def can_ask_mac(self) -> bool:
+        """The Mac accepts setting changes from the Windows panel (3.1.2 and later)."""
+        return ACTIONS_FEATURE in self.server_features()
+
+    def ask_mac(self, req: dict) -> bool:
+        if not self.can_ask_mac():
+            return False
+        try:
+            self.send_json(MSG_ACTION, req)
+            return True
+        except Exception:
+            return False
+
+    @property
+    def audio_on(self) -> bool:
+        """The Mac's sound is being played here (the Mac turned the audio transfer on)."""
+        a = self.audio
+        return bool(a is not None and a.running)
 
     def send_json(self, mtype: int, obj) -> None:
         ch = self.ch
@@ -326,6 +346,7 @@ class ControlClient(threading.Thread):
                 continue
             self.server_name = str(server_hello.get("name") or label)
             self.server_version = str(server_hello.get("version") or "")
+            self.server_side = str(server_hello.get("side") or "right")
             self.auth_mode = mode
             self._server_features = list(server_hello.get("features") or [])
             self.file_target = (host, port)

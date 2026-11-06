@@ -50,6 +50,7 @@ def test_bundle_excludes_mac_and_is_deterministic():
     assert v == mirrorway.__version__ and sha == hashlib.sha256(data).hexdigest()
     assert "mirrorway/win/app.py" in names and "mirrorway/__init__.py" in names
     assert "mirrorway/assets/mirrorway.ico" in names                      # the shortcuts point at it
+    assert "mirrorway/assets/logo.png" in names                           # the tray panel shows it
     assert not any(n.startswith("mirrorway/mac/") or "__pycache__" in n for n in names)
     assert "requirements-windows.txt" in names
 

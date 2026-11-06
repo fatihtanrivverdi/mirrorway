@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.2 — the tray panel (Windows)
+- **Tray panel.** A left click on the Windows tray icon opens a panel above it with the connection status, the
+  edge of the Mac's screen that leads to this PC, **Show/Hide the Mac's screen** and tiles for clipboard, the Mac's
+  sound, files, reconnecting, pairing and diagnostics. It follows the Windows light/dark app theme and closes when
+  it loses focus. The menu is still on the right click.
+- **Ctrl + Alt + S** shows or hides the Mac's screen on Windows (skipped, and logged, if another app uses it).
+- **The Mac's sound from Windows.** The **Mac's sound** tile turns the audio transfer on the Mac on or off (new
+  message: the Mac accepts it from 3.1.2 on).
+- **Files can be turned off on Windows** (the **Files** tile): copied files are then neither sent nor received.
+
 ## 3.1.1 — the Settings window (Mac)
 - **Settings window.** **Settings…** (`⌘,`) in the quick panel and the menu opens a window with a sidebar of
   pages: General, Keyboard and Mouse, Screen and Video, Audio, Clipboard and Files, Network, Paired Devices and

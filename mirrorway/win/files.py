@@ -39,6 +39,11 @@ class FileClient:
         c = self.control
         return FX.FEATURE in (c.server_features() or []) and c.creds.paired() and c.file_target is not None
 
+    def enabled(self) -> bool:
+        """File copy and paste is on in this PC's settings (the Files tile in the panel)."""
+        cfg = getattr(self.control, "cfg", None)
+        return cfg is None or bool(cfg.get("file_clipboard", True))
+
     def _connect(self):
         from .client import open_channel
         host, port = self.control.file_target
@@ -72,6 +77,9 @@ class FileClient:
     def on_offer(self, info: dict) -> None:
         """Files were copied on the Mac: download them."""
         if not self.supported():
+            return
+        if not self.enabled():
+            log.info("Files copied on the Mac were not received: file copy and paste is off on this PC")
             return
         if int(info.get("total") or 0) > self.max_total:
             log.info("The files copied on the Mac are too large, not received: %s", FX.human_size(int(info["total"])))
@@ -123,6 +131,8 @@ class FileClient:
         """Files were copied on Windows (from the clipboard sync). True: the transfer took over."""
         if any(FX.inside(p, FX.staging_root(self.base_dir)) for p in paths):
             return True                          # files that came from the Mac and were put on the clipboard: do not send back
+        if not self.enabled():
+            return False
         if not self.supported():
             log.info("The copied files were not sent to the Mac (%s): the Mac is not connected or does not support "
                      "file transfer", FX.names_of(paths))

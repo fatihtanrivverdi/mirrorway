@@ -22,7 +22,7 @@ from ..devkeys import KeyUnavailable, b64d, b64e, fingerprint, load_identity
 from ..h264 import FLAG_KEY
 from ..secure import (MAGIC2, MSG_ENROLL, ROLE_PAIR, ST_TOO_MANY, PairingClosed,
                       UnknownDevice, format_code, new_pairing_code, server_accept, server_pair)
-from ..protocol import (MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
+from ..protocol import (ACTIONS_FEATURE, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LEAVE, MSG_LOG, MSG_MOVE, MSG_PING, MSG_STATS,
                         MSG_UPDATE, MSG_UPDATE_RESULT,
                         MSG_VIDEO_INFO, MSG_VIEW, PROTOCOL_VERSION, ROLE_AUDIO, ROLE_CONTROL, ROLE_FILE, ROLE_VIDEO, AuthError, ProtocolError,
@@ -156,6 +156,8 @@ class ControlSession:
                             str(rec.get("msg", ""))[:1000])
                 elif mtype == MSG_ENROLL:
                     self.server.enroll(self, json.loads(payload.decode("utf-8")))
+                elif mtype == MSG_ACTION:
+                    self.server.action_from_windows(json.loads(payload.decode("utf-8")))
                 elif mtype == MSG_HELLO:
                     upd = json.loads(payload.decode("utf-8"))
                     self.hello.update(upd)
@@ -1353,7 +1355,8 @@ class MirrorwayServer:
             ch.send_json(MSG_HELLO, {
                 "name": machine_name(), "version": __version__, "protocol": PROTOCOL_VERSION,
                 "side": self.cfg.get("side"), "screen_share": bool(self.cfg.get("screen_share")),
-                "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, AU.FEATURE],
+                "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, AU.FEATURE,
+                             ACTIONS_FEATURE],
                 "id": self.identity.fingerprint if self.identity else "",
             })
         except Exception:
@@ -1700,6 +1703,16 @@ class MirrorwayServer:
             self.volume.set(False)
             self.cfg.set("audio_muted_by_app", False)
             log.info("The Mac's sound was unmuted (Mirrorway had muted it during its previous run)")
+
+    def action_from_windows(self, req: dict) -> None:
+        """The Windows panel changed a setting that lives on the Mac (only the audio transfer for now)."""
+        if isinstance(req, dict) and isinstance(req.get("audio"), bool):
+            if bool(self.cfg.get("audio")) != req["audio"]:
+                log.info("Audio transfer turned %s from Windows", "on" if req["audio"] else "off")
+                self.cfg.set("audio", req["audio"])
+                threading.Thread(target=self.send_audio_state, daemon=True, name="mirrorway-audio-state").start()
+            else:
+                self.send_audio_state()          # tell Windows the current state anyway
 
     def request_viewer(self, show: bool = True) -> bool:
         """Open (or close) the screen window on Windows: for the second screen and the panel's Screen tile.

@@ -49,7 +49,9 @@ MSG_ENTER = 10         # s->c JSON {"from": "left"|"right"|"top"|"bottom"|"cente
                       #          "exit": edge, "pos": [x, y]?, "extend": [x, y, w, h]? (second-screen monitor)}
 MSG_LEAVE = 11         # c->s JSON {"ratio": float, "vd": [fx, fy]? (return to this point of the second screen)}
 MSG_EXIT = 12          # s->c  (control returned to the Mac)
-MSG_VIEW = 13          # s->c JSON {"open": true} — open the screen window on Windows (when the second screen turns on)
+MSG_VIEW = 13          # s->c JSON {"open": true|false} — open/close the screen window on Windows (second screen, panel)
+MSG_ACTION = 14        # c->s JSON {"audio": bool} — a setting changed from the Windows panel (feature "actions")
+ACTIONS_FEATURE = "actions"
 MSG_MOVE = 20          # s->c <ff  dx, dy  (Windows pikseli)
 MSG_BUTTON = 21        # s->c <BB  button, pressed(1)/released(0)
 MSG_SCROLL = 22        # s->c <ii  vertical, horizontal (WHEEL_DELTA units, 120 = one notch)

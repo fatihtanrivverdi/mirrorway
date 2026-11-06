@@ -16,6 +16,8 @@ from .i18n import T
 
 ACTIONS = ("screen", "second", "audio", "panel")
 DEFAULT_SHORTCUTS = {"screen": "s", "second": "d", "audio": "a", "panel": "m"}
+WIN_ACTIONS = ("screen",)
+WIN_DEFAULT_SHORTCUTS = {"screen": "s"}
 
 # Mac virtual key codes of the letters (ANSI positions; macOS reports the same codes on ISO keyboards)
 MAC_KEYCODES = {"a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11,
@@ -26,14 +28,14 @@ MAC_KEYCODES = {"a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, 
 ARROWS = {"right": ("→", "←"), "left": ("←", "→"), "top": ("↑", "↓"), "bottom": ("↓", "↑")}
 
 
-def shortcut_letters(cfg) -> Dict[str, str]:
+def shortcut_letters(cfg, actions=ACTIONS, defaults=DEFAULT_SHORTCUTS) -> Dict[str, str]:
     """{action: letter} from the setting; unknown, repeated or invalid letters fall back to off ("")."""
     raw = cfg.get("shortcuts") if cfg is not None else None
     raw = raw if isinstance(raw, dict) else {}
     out: Dict[str, str] = {}
     used = set()
-    for action in ACTIONS:
-        letter = raw.get(action, DEFAULT_SHORTCUTS[action])
+    for action in actions:
+        letter = raw.get(action, defaults[action])
         letter = str(letter or "").strip().lower()
         if letter not in MAC_KEYCODES or letter in used:
             letter = ""
@@ -47,6 +49,14 @@ def mac_shortcut(letter: str) -> str:
     return "⌃⌥" + letter.upper() if letter else ""
 
 
+def win_shortcut(letter: str) -> str:
+    return "Ctrl+Alt+" + letter.upper() if letter else ""
+
+
+def win_shortcut_letters(cfg) -> Dict[str, str]:
+    return shortcut_letters(cfg, WIN_ACTIONS, WIN_DEFAULT_SHORTCUTS)
+
+
 def mac_action_keys(cfg) -> Dict[int, str]:
     """{Mac key code: action} for the router."""
     return {MAC_KEYCODES[letter]: action for action, letter in shortcut_letters(cfg).items() if letter}
@@ -57,6 +67,7 @@ class Header:
     state: str            # connected, remote, waiting, permission, paused
     title: str
     detail: str
+    subtitle: str = ""    # Windows: the line under the app name
 
 
 @dataclass
@@ -253,3 +264,70 @@ def mac_panel(st: dict, cfg, *, permission: bool = True, waking: Optional[int] =
 
     footer = T("Update {version} available").format(version=update) if update else f"Mirrorway {version}"
     return Panel(_header(st, permission), primary, tiles, rows, footer, update)
+
+
+# ---- Windows tray panel ------------------------------------------------------------------------------------------
+def _win_hint(side: str, remote: bool) -> str:
+    """Where to push the pointer: side is where Windows sits next to the Mac."""
+    if remote:
+        return {"right": T("Push the pointer against the left edge to go back to the Mac"),
+                "left": T("Push the pointer against the right edge to go back to the Mac"),
+                "top": T("Push the pointer against the bottom edge to go back to the Mac"),
+                "bottom": T("Push the pointer against the top edge to go back to the Mac")}[side]
+    return {"right": T("Push the Mac's pointer against its right edge"),
+            "left": T("Push the Mac's pointer against its left edge"),
+            "top": T("Push the Mac's pointer against its top edge"),
+            "bottom": T("Push the Mac's pointer against its bottom edge")}[side]
+
+
+def win_panel(*, state: str, status_text: str, cfg, mac_name: str = "", remote: bool = False,
+              viewer: bool = False, side: str = "right", rtt_ms: Optional[float] = None, fps: float = 0.0,
+              audio_supported: bool = False, audio_on: bool = False, reconnecting: bool = False,
+              version: str = __version__) -> Panel:
+    """The Windows tray panel.
+
+    state: the connection state of the Windows app (connected, idle, error, auth, unpaired, ...)
+    viewer: the screen window is open; audio_on: the Mac's sound plays here
+    """
+    connected = state == "connected"
+    side = side if side in ARROWS else "right"
+    if connected:
+        sub = T("Connected to {name}").format(name=mac_name or "Mac")
+        parts = [_win_hint(side, remote)]
+        if rtt_ms is not None:
+            parts.append(f"{rtt_ms:.0f} ms")
+        if viewer and fps:
+            parts.append(f"{fps:.0f} fps")
+        title = T("The Mac's keyboard and mouse are on this PC") if remote else \
+            T("The Mac's keyboard and mouse can reach this PC")
+        header = Header("remote" if remote else "connected", title, " · ".join(parts), sub)
+    elif state in ("auth", "unpaired"):
+        header = Header("permission", T("Not paired with a Mac"),
+                        T("Click Pair a Mac and enter the code shown on the Mac"), status_text)
+    elif state == "error":
+        header = Header("paused", T("Cannot reach the Mac"), status_text, T("Not connected"))
+    else:
+        header = Header("waiting", T("Waiting for the Mac…"),
+                        T("Mirrorway connects by itself when the Mac is on the same network"), status_text)
+
+    letter = win_shortcut_letters(cfg)["screen"]
+    primary = Primary("hide_screen" if viewer else "show_screen",
+                      T("Hide the Mac's screen") if viewer else T("Show the Mac's screen"),
+                      win_shortcut(letter), connected or viewer)
+    clip_on = bool(cfg.get("clipboard"))
+    files_on = bool(cfg.get("file_clipboard", True))
+    if not connected:
+        sound = T("Off")
+    elif not audio_supported:
+        sound = T("Update needed")
+    else:
+        sound = T("On") if audio_on else T("Off")
+    tiles = [
+        Tile("clipboard", T("Clipboard"), T("On") if clip_on else T("Off"), clip_on, True),
+        Tile("audio", T("Mac's sound"), sound, audio_on, connected and audio_supported),
+        Tile("files", T("Files"), T("On") if files_on else T("Off"), files_on, True),
+        Tile("reconnect", T("Reconnect"), T("Connecting…") if reconnecting else "", reconnecting, not reconnecting),
+        Tile("pair", T("Pair a Mac"), "", False, True),
+        Tile("diag", T("Diagnostics"), "", False, True),
+    ]
+    return Panel(header, primary, tiles, [], f"Mirrorway {version}")
