@@ -677,4 +677,154 @@ TR = {
         'Monitör {n}',
     '{n} paired':
         '{n} eşleşmiş',
+    'Mirrorway Settings':
+        'Mirrorway Ayarları',
+    'General':
+        'Genel',
+    'Keyboard and Mouse':
+        'Klavye ve fare',
+    'Screen and Video':
+        'Ekran ve görüntü',
+    'Clipboard and Files':
+        'Pano ve dosyalar',
+    'Pair a new device':
+        'Yeni cihaz eşleştir',
+    'Windows is on this side of the screen':
+        'Windows ekranın bu tarafında',
+    'Switch at the screen edge':
+        'Ekran kenarından geçiş',
+    'Open at login':
+        'Mac açılınca başlat',
+    'Show the state next to the menu bar icon':
+        'Durumu menü çubuğu simgesinin yanında göster',
+    'Clicking the icon opens the quick panel':
+        'Simgeye tıklayınca hızlı panel açılsın',
+    'Mac screen on Windows':
+        "Mac ekranı Windows'ta",
+    'Second screen on or off':
+        'İkinci ekranı aç/kapat',
+    'Audio on Windows on or off':
+        "Windows'ta sesi aç/kapat",
+    'Open the Mirrorway panel':
+        'Mirrorway panelini aç',
+    'Pair…':
+        'Eşleştir…',
+    'Otherwise the menu opens; right-click always opens the menu':
+        'Kapalıyken menü açılır; sağ tık her zaman menüyü açar',
+    'Open…':
+        'Aç…',
+    'Quick shortcuts':
+        'Hızlı kısayollar',
+    'Shortcuts work everywhere while Mirrorway runs, also while you control Windows. The arrows follow the side of the screen.':
+        "Kısayollar Mirrorway çalışırken her yerde, Windows'u kontrol ederken de çalışır. Oklar seçtiğiniz ekran tarafına göre değişir.",
+    'Permissions':
+        'İzinler',
+    '{scale}× screen ratio (total {total}×)':
+        '{scale}× ekran oranı (toplam {total}×)',
+    'Pointer':
+        'İmleç',
+    'A Windows monitor becomes a second screen for the Mac (a virtual display). Experimental.':
+        "Bir Windows monitörü Mac'in ikinci ekranı olur (sanal ekran). Deneysel.",
+    'Shows a 6-digit code to enter on Windows':
+        "Windows'a girilecek 6 haneli kodu gösterir",
+    'Help':
+        'Yardım',
+    'Only when Mirrorway runs as Mirrorway.app':
+        'Yalnızca Mirrorway.app olarak çalışırken',
+    'Mirrorway needs Accessibility and Input Monitoring to send the keyboard and mouse to Windows. Turn it on in both lists, then restart Mirrorway.':
+        "Klavye ve fareyi Windows'a göndermek için Erişilebilirlik ve Girdi İzleme izni gerekir. İki listede de açın, sonra Mirrorway'i yeniden başlatın.",
+    'Remove…':
+        'Kaldır…',
+    'Automatic speed (screen ratio)':
+        'Otomatik hız (ekran oranı)',
+    'Pointer speed on Windows':
+        "Windows'ta imleç hızı",
+    'Trackpad gestures on Windows':
+        "Trackpad hareketleri Windows'ta",
+    'Scrolling speed':
+        'Kaydırma hızı',
+    'Reverse direction':
+        'Yönü ters çevir',
+    'Special characters with Option (@ € …)':
+        'Option ile özel karakterler (@ € …)',
+    'Keyboard type':
+        'Klavye tipi',
+    'Display {n}':
+        'Ekran {n}',
+    "Share the Mac's screen":
+        "Mac'in ekranını paylaş",
+    'Shared display':
+        'Paylaşılan ekran',
+    'Picture quality':
+        'Görüntü kalitesi',
+    'Video format':
+        'Görüntü biçimi',
+    'Adjust to the connection automatically (H.264)':
+        'Bağlantıya göre otomatik ayarla (H.264)',
+    'Windows monitor':
+        'Windows monitörü',
+    "Play the Mac's sound on Windows":
+        "Mac'in sesini Windows'ta çal",
+    "Mute the Mac's speakers meanwhile":
+        "Bu sırada Mac'in hoparlörünü kapat",
+    'Clipboard sync':
+        'Pano senkronizasyonu',
+    'File copy and paste':
+        'Dosya kopyala-yapıştır',
+    'This network':
+        'Bu ağ',
+    'Work only on the home network':
+        'Yalnızca ev ağında çalış',
+    'Trust this network':
+        'Bu ağa güven',
+    'Reset trusted networks (keep only this one)':
+        'Güvenilen ağları sıfırla (yalnızca bu ağ kalsın)',
+    'Address':
+        'Adres',
+    'Code {code} · {time}':
+        'Kod {code} · {time}',
+    'Version':
+        'Sürüm',
+    'Check for updates':
+        'Güncellemeleri denetle',
+    'Check automatically once a day':
+        'Günde bir kez kendiliğinden denetle',
+    'Diagnostics bundle':
+        'Tanı paketi',
+    'Log files':
+        'Günlük dosyaları',
+    'Swipes and pinches act on Windows while you control it':
+        "Windows'u kontrol ederken kaydırma ve sıkıştırma hareketleri Windows'ta çalışır",
+    'Windows shows it in the screen window':
+        'Windows bunu ekran penceresinde gösterir',
+    'Text, formatted text and images, both ways':
+        'Metin, biçimli metin ve görseller, iki yönde',
+    'Copy in Finder, paste in Explorer (and back)':
+        "Finder'da kopyala, Gezgin'de yapıştır (ve tersi)",
+    'At a café or at work Mirrorway turns itself off':
+        'Kafede ya da işte Mirrorway kendini kapatır',
+    'Trust':
+        'Güven',
+    'Reset…':
+        'Sıfırla…',
+    'Copy':
+        'Kopyala',
+    'Install':
+        'Kur',
+    'Return to the previous version':
+        'Önceki sürüme dön',
+    'Return…':
+        'Dön…',
+    'Logs and settings in one zip, without codes or keys':
+        'Günlükler ve ayarlar tek bir zip içinde; kodlar ve anahtarlar hariç',
+    'Create':
+        'Oluştur',
+    'Show':
+        'Göster',
+    'Check':
+        'Denetle',
+    'Install {version} and restart':
+        '{version} sürümünü kur ve yeniden başlat',
+    'Return to the previous version ({version})':
+        'Önceki sürüme dön ({version})',
 }

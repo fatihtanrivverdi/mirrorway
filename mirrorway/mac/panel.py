@@ -119,6 +119,12 @@ class MirrorwayPanelTarget(NSObject):
     def clicked_(self, sender):
         _call(self.mw_click, int(sender.tag()))
 
+    def changed_(self, sender):
+        _call(self.mw_change, sender)
+
+    def windowWillClose_(self, _notification):
+        _call(self.mw_closed)
+
     def popoverDidClose_(self, _notification):
         _call(self.mw_closed)
 
@@ -135,9 +141,9 @@ def _call(fn, *args) -> None:
         log.exception("panel callback failed")
 
 
-def make_target(click=None, closed=None, menu_closed=None):
+def make_target(click=None, closed=None, menu_closed=None, change=None):
     t = MirrorwayPanelTarget.alloc().init()
-    t.mw_click, t.mw_closed, t.mw_menu_closed = click, closed, menu_closed
+    t.mw_click, t.mw_closed, t.mw_menu_closed, t.mw_change = click, closed, menu_closed, change
     return t
 
 
@@ -162,7 +168,7 @@ def _label(parent, frame, size, weight=NSFontWeightRegular, color=None, align=No
 
 
 def _symbol(key: str, size: float, weight=NSFontWeightMedium):
-    for name in SYMBOLS.get(key, ()):
+    for name in SYMBOLS.get(key, (key,)):
         try:
             img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None)
         except Exception:                                    # macOS 10.15: no SF Symbols in AppKit

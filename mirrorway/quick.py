@@ -106,7 +106,7 @@ class Panel:
         return next(r for r in self.rows if r.key == key)
 
 
-def _clock(seconds: int) -> str:
+def clock(seconds: int) -> str:
     seconds = max(0, int(seconds))
     return f"{seconds // 60}:{seconds % 60:02d}"
 
@@ -237,7 +237,7 @@ def mac_panel(st: dict, cfg, *, permission: bool = True, waking: Optional[int] =
     p = st.get("pairing")
     devices = st.get("devices") or []
     if p:
-        pair = Row("pair", T("Pairing code: {code}").format(code=p["display"]), _clock(p.get("remaining", 0)), "ok")
+        pair = Row("pair", T("Pairing code: {code}").format(code=p["display"]), clock(p.get("remaining", 0)), "ok")
     else:
         pair = Row("pair", T("Pair a New Device…"), T("{n} paired").format(n=len(devices)) if devices else "")
     state = net.get("state")

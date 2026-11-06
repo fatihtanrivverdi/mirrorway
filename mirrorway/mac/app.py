@@ -12,11 +12,11 @@ import time
 import rumps
 
 from .. import APP_NAME, __version__
-from .. import quick
+from .. import prefs, quick
 from ..config import CONFIG_DIR
 from ..extend import choose_monitor
-from ..i18n import NAMES as LANGUAGE_NAMES
 from ..i18n import T
+from ..prefs import SPEEDS, codecs, layouts, qualities, sides
 from ..wol import WakeSession
 from . import loginitem
 from . import selfupdate as U
@@ -27,7 +27,6 @@ from .tap import EventTap, MacPlatform, accessibility_trusted, request_input_mon
 
 log = logging.getLogger("mirrorway.app")
 
-SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
 ARROWS = {"right": "→", "left": "←", "top": "↑", "bottom": "↓"}
 
 PRIVACY_URLS = {
@@ -35,22 +34,6 @@ PRIVACY_URLS = {
     "input": "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
     "screen": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 }
-
-
-def sides():
-    return [("right", T("Right")), ("left", T("Left")), ("top", T("Above")), ("bottom", T("Below"))]
-
-
-def qualities():
-    return [("low", T("Low (smooth, little bandwidth)")), ("medium", T("Medium")), ("high", T("High (sharp text)"))]
-
-
-def codecs():
-    return [("h264", T("H.264 — smooth (recommended)")), ("jpeg", T("JPEG — sharpest text"))]
-
-
-def layouts():
-    return [("auto", T("Automatic")), ("iso", T("ISO (Turkish/European)")), ("ansi", T("ANSI (US)"))]
 
 
 def _open(url: str) -> None:
@@ -150,6 +133,7 @@ class MirrorwayMacApp(rumps.App):
         self._panel_tried = False
         self._ns_menu = None
         self._status_target = None
+        self.settings_win = None
         self.server.router.on_action = self._on_shortcut
         self._build_menu()
 
@@ -268,10 +252,12 @@ class MirrorwayMacApp(rumps.App):
             displays = list_displays()
         except Exception:
             displays = [{"index": 0, "w": 0, "h": 0, "main": True}]
+        self._displays = []
         for d in displays:
             label = T("Display {n} ({w}×{h})").format(n=d["index"] + 1, w=d["w"], h=d["h"])
             if d.get("main"):
                 label += " — " + T("main")
+            self._displays.append((d["index"], label))
             it = rumps.MenuItem(label, callback=self._make_setter("display_index", d["index"],
                                                                   self.display_items, video=True))
             self.display_items[d["index"]] = it
@@ -319,7 +305,7 @@ class MirrorwayMacApp(rumps.App):
         # Language
         self.m_lang = rumps.MenuItem(T("Language"))
         self.lang_items = {}
-        for key, label in [("auto", T("Automatic (system)"))] + list(LANGUAGE_NAMES.items()):
+        for key, label in prefs.languages():
             it = rumps.MenuItem(label, callback=lambda _s, k=key: self._set_language(k))
             self.lang_items[key] = it
             self.m_lang.add(it)
@@ -371,6 +357,7 @@ class MirrorwayMacApp(rumps.App):
             self.m_quality,
             self.m_codec,
             None,
+            rumps.MenuItem(T("Settings…"), callback=lambda _s: self.open_settings(), key=","),
             self.m_update,
             self.mi_login,
             self.mi_panel,
@@ -449,14 +436,17 @@ class MirrorwayMacApp(rumps.App):
         self.server.router.reload_settings()
 
     def _toggle_login(self, sender):
+        self._set_login(not loginitem.is_enabled())
+        sender.state = int(loginitem.is_enabled())
+
+    def _set_login(self, on: bool) -> None:
         try:
-            if loginitem.is_enabled():
-                loginitem.disable()
-            else:
+            if on and not loginitem.is_enabled():
                 loginitem.enable(self.bundle)
+            elif not on and loginitem.is_enabled():
+                loginitem.disable()
         except Exception as exc:
             rumps.alert(APP_NAME, T("Could not change the setting: {error}").format(error=exc))
-        sender.state = int(loginitem.is_enabled())
 
     def _toggle_adaptive(self, sender):
         val = not bool(self.cfg.get("adaptive_quality", True))
@@ -557,6 +547,8 @@ class MirrorwayMacApp(rumps.App):
 
     def _set_title(self, suffix: str) -> None:
         """State marks next to the menu bar icon ("•" connected, " Win" controlling Windows, "!" needs permission)."""
+        if suffix in ("•", " Win") and not self.cfg.get("menubar_state", True):
+            suffix = ""
         title = suffix if self._has_icon else "⇆" + suffix
         if self.title != (title or None):
             self.title = title or None
@@ -838,7 +830,7 @@ class MirrorwayMacApp(rumps.App):
             self.server.disconnect_all()
         elif key in ("settings", "footer:settings"):
             self.close_panel()
-            _main_thread(self.show_menu)
+            _main_thread(self.open_settings)
         elif key == "footer:update":
             self.close_panel()
             self.install_update()
@@ -961,6 +953,163 @@ class MirrorwayMacApp(rumps.App):
         if val and self.panel is None:
             self._panel_tried = False
             self._install_panel()
+
+    # ---- settings window ---------------------------------------------------------------------------
+    def settings_pages(self, st=None) -> list:
+        st = st or self.server.status()
+        u = self.updater
+        info = u.info if u.state == "available" else None
+        tap = self.tap
+        ctx = {
+            "displays": self._displays,
+            "extend_choices": self.server.extend.choices(),
+            "extend_text": self._extend_state_text(st),
+            "audio_text": self._audio_text(st.get("audio"), bool(st.get("connected"))),
+            "files_text": self._files_text(st.get("files")),
+            "login": {"available": bool(self.bundle), "enabled": bool(self.bundle) and loginitem.is_enabled()},
+            "update": {"text": u.text, "busy": u.busy, "available": info.version if info else None,
+                       "previous": U.previous_version()},
+            "permission": not (tap is not None and tap.error == "permission" and not tap.is_alive()),
+            "version": __version__,
+        }
+        return prefs.mac_pages(self.cfg, st, ctx)
+
+    def open_settings(self, page=None) -> None:
+        try:
+            if self.settings_win is None:
+                from .settings import SettingsWindow
+                self.settings_win = SettingsWindow(self.apply_setting)
+            self.settings_win.update(self.settings_pages())
+            self.settings_win.show(page)
+        except Exception:
+            log.exception("Could not open the Settings window; showing the menu")
+            self.show_menu()
+
+    def refresh_settings(self, st=None) -> None:
+        w = self.settings_win
+        if w is None or not w.visible:
+            return
+        try:
+            w.update(self.settings_pages(st))
+        except Exception:
+            log.exception("Could not update the Settings window")
+
+    _BOOL_SETTINGS = ("edge_switch", "auto_speed", "invert_scroll", "option_unicode", "gestures", "clipboard",
+                      "file_clipboard", "auto_update_check", "menubar_state")
+
+    def apply_setting(self, key: str, value) -> None:
+        """A change in the Settings window (the same effect as the menu item)."""
+        cfg, router = self.cfg, self.server.router
+        log.info("Setting changed: %s", key)
+        try:
+            if key.startswith("action:"):
+                self._settings_action(key[len("action:"):])
+            elif key.startswith("shortcut:"):
+                action = key.split(":", 1)[1]
+                letters = quick.shortcut_letters(cfg)
+                for other, letter in letters.items():          # a letter can belong to one shortcut only
+                    if value and letter == value and other != action:
+                        letters[other] = ""
+                letters[action] = value or ""
+                cfg.set("shortcuts", letters)
+                router.reload_settings()
+            elif key == "side":
+                cfg.set("side", value)
+                router.reload_settings()
+            elif key in ("speed", "scroll_speed"):
+                cfg.set(key, float(value))
+            elif key in ("keyboard_layout", "swap_cmd_ctrl"):
+                cfg.set(key, value)
+                router.reload_settings()
+            elif key == "altgr":
+                cfg.set("left_option", "altgr" if value else "alt")
+                router.reload_settings()
+            elif key in ("display_index", "quality", "video_codec", "adaptive_quality"):
+                cfg.set(key, value)
+                self.server.restart_video()
+            elif key == "screen_share":
+                cfg.set(key, bool(value))
+                if value:
+                    self._request_screen_permission()
+                else:
+                    self.server.restart_video()
+            elif key == "extend_monitor":
+                self._set_extend(list(value) if value else None)
+            elif key == "audio":
+                cfg.set("audio", bool(value))
+                self._bg(self.server.send_audio_state, "mirrorway-audio-state")
+            elif key == "audio_mute_mac":
+                cfg.set(key, bool(value))
+                self._bg(self.server.audio_mute_changed, "mirrorway-audio-mute")
+            elif key == "network_lock":
+                cfg.set(key, bool(value))
+                self.server.apply_network(self.server.netlock.refresh())
+            elif key == "login":
+                self._set_login(bool(value))
+            elif key == "language":
+                self._set_language(value)
+            elif key == "quick_panel":
+                if bool(value) != bool(cfg.get("quick_panel", True)):
+                    self._toggle_quick_panel(self.mi_panel)
+            elif key in self._BOOL_SETTINGS:
+                cfg.set(key, bool(value))
+            else:
+                log.warning("Unknown setting: %s", key)
+                return
+        except Exception:
+            log.exception("Could not apply the setting %s", key)
+        self._sync_menu()
+        self.refresh_settings()
+        self.refresh_panel()
+
+    def _settings_action(self, name: str) -> None:
+        if name.startswith("perm:"):
+            _open(PRIVACY_URLS[name[len("perm:"):]])
+        elif name.startswith("remove_device:"):
+            dev_id = name[len("remove_device:"):]
+            dev = next((d for d in self.server.devices() if d["id"] == dev_id), None)
+            if dev is not None:
+                self._remove_device(dev)
+        else:
+            fn = {"trust_network": lambda: self._trust_network(None),
+                  "reset_networks": lambda: self._reset_networks(None),
+                  "copy_ip": lambda: self.copy_ip(None),
+                  "pair": lambda: self.pair_new_device(None),
+                  "check_updates": self.check_updates,
+                  "install_update": self.install_update,
+                  "rollback": self.rollback_update,
+                  "diag": self.make_diag,
+                  "show_log": lambda: _open(str(CONFIG_DIR))}.get(name)
+            if fn is None:
+                log.warning("Unknown action: %s", name)
+            else:
+                fn()
+
+    def _sync_menu(self) -> None:
+        """Menu check marks from the settings (after a change in the Settings window)."""
+        cfg = self.cfg
+        self._check_group(self.side_items, cfg.get("side"))
+        self._check_group(self.speed_items, float(cfg.get("speed") or 1.0))
+        self._check_group(self.scroll_items, float(cfg.get("scroll_speed") or 1.0))
+        self._check_group(self.layout_items, cfg.get("keyboard_layout"))
+        self._check_group(self.display_items, int(cfg.get("display_index") or 0))
+        self._check_group(self.quality_items, cfg.get("quality"))
+        self._check_group(self.codec_items, cfg.get("video_codec") or "h264")
+        self._check_group(self.lang_items, cfg.get("language") or "auto")
+        for item, key, default in (
+                (self.mi_auto_speed, "auto_speed", True), (self.mi_invert, "invert_scroll", False),
+                (self.mi_swap, "swap_cmd_ctrl", False), (self.mi_unicode, "option_unicode", True),
+                (self.mi_edge, "edge_switch", False), (self.mi_clip, "clipboard", False),
+                (self.mi_gestures, "gestures", True), (self.mi_files, "file_clipboard", True),
+                (self.mi_audio, "audio", False), (self.mi_audio_mute, "audio_mute_mac", True),
+                (self.mi_share, "screen_share", False), (self.mi_adaptive, "adaptive_quality", True),
+                (self.mi_upd_auto, "auto_update_check", True), (self.mi_net_lock, "network_lock", True),
+                (self.mi_panel, "quick_panel", True)):
+            item.state = int(bool(cfg.get(key, default)))
+        self.mi_altgr.state = int(cfg.get("left_option") == "altgr")
+        self.mi_login.state = int(bool(self.bundle) and loginitem.is_enabled())
+        self._extend_sig = None
+        self._refresh_static()
 
     def quit_app(self, _sender):
         try:
@@ -1123,6 +1272,7 @@ class MirrorwayMacApp(rumps.App):
         self.mi_ip.title = T("This Mac: {address}{extra}  (copy)").format(address=f"{st['ip']}:{st['port']}", extra=extra)
         if self.panel is not None and self.panel.is_shown():
             self.refresh_panel(st)
+        self.refresh_settings(st)
 
 
 def run(cfg) -> None:

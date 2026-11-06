@@ -53,6 +53,7 @@ MAC_DEFAULTS = {
     "win_monitors": [],         # monitors Windows reported last (for the menu while Windows is not connected)
     "extend_last": None,        # the monitor chosen last ([x, y, w, h]); the panel's tile turns it back on
     "quick_panel": True,        # clicking the menu bar icon opens the panel (False: the classic menu)
+    "menubar_state": True,      # "•" (connected) and " Win" (controlling Windows) next to the menu bar icon
     "shortcuts": {"screen": "s", "second": "d", "audio": "a", "panel": "m"},   # Control + Option + letter
 }
 

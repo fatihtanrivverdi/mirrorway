@@ -316,3 +316,55 @@ def test_mac_app_quick_actions():
         print('OK')
     """)
     assert "OK" in out
+
+
+def test_mac_app_settings_window_changes():
+    """Changes from the Settings window act like the menu items and keep the menu's check marks in step."""
+    out = run_script("""
+        import stubs
+        Q, AK, R, pb = stubs.install_mac()
+        from mirrorway.config import Config, MAC_DEFAULTS
+        cfg = Config('mac-settings-test', MAC_DEFAULTS)
+        from mirrorway.mac import app as A
+        a = A.MirrorwayMacApp(cfg)
+        a.server.load_identity()
+        pages = {p.id: p for p in a.settings_pages()}
+        assert len(pages) == 8 and pages['general'].item('side').value == 'right'
+        titles = [i.title for i in a.menu._order if i is not None]
+        assert 'Settings…' in titles, titles
+        reloads = []
+        a.server.router.reload_settings = lambda: reloads.append(1)
+        restarts = []
+        a.server.restart_video = lambda: restarts.append(1)
+        a.apply_setting('side', 'left')
+        assert cfg.get('side') == 'left' and a.side_items['left'].state == 1 and a.side_items['right'].state == 0
+        assert reloads and '←' in a.mi_switch.title
+        a.apply_setting('speed', 2.0)
+        assert cfg.get('speed') == 2.0 and a.speed_items[2.0].state == 1
+        a.apply_setting('clipboard', False)
+        assert cfg.get('clipboard') is False and a.mi_clip.state == 0
+        a.apply_setting('altgr', True)
+        assert cfg.get('left_option') == 'altgr' and a.mi_altgr.state == 1
+        a.apply_setting('quality', 'high')
+        assert restarts and a.quality_items['high'].state == 1
+        # a letter moves from one shortcut to another
+        a.apply_setting('shortcut:panel', 's')
+        assert cfg.get('shortcuts') == {'screen': '', 'second': 'd', 'audio': 'a', 'panel': 's'}
+        a.apply_setting('menubar_state', False)
+        a._set_title('•')
+        assert not a.title
+        a._set_title('!')
+        assert a.title == '!'
+        a.apply_setting('quick_panel', False)
+        assert cfg.get('quick_panel') is False and a.mi_panel.state == 0
+        dev = a.server.add_device('Office-PC', b'k' * 32, 'windows')
+        a.apply_setting('action:remove_device:' + dev['id'], None)
+        assert a.server.devices() == [] and 'Remove the pairing' in R.alerts[-1][1]
+        a.apply_setting('action:pair', None)
+        assert 'enter this code' in R.alerts[-1][1]
+        a.apply_setting('nonsense', 1)                     # ignored
+        # the Settings window is optional: without AppKit opening it falls back to the menu
+        a.open_settings()
+        print('OK')
+    """)
+    assert "OK" in out

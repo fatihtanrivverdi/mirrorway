@@ -389,9 +389,49 @@ def status_item_panel():
     return "click opens it, close works, Control + Option + M opens it"
 
 
+def settings_window():
+    """The Settings window: opens, every page builds, a change applies; some pages are printed as PNG."""
+    import base64
+
+    from AppKit import NSApplication, NSDate, NSRunLoop
+    from mirrorway.config import Config, MAC_DEFAULTS
+    from mirrorway.mac import app as A
+
+    def spin(seconds):
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(seconds))
+
+    NSApplication.sharedApplication().setActivationPolicy_(1)
+    cfg = Config("mac-ci-settings", MAC_DEFAULTS)
+    a = A.MirrorwayMacApp(cfg)
+    a.open_settings("general")
+    spin(0.5)
+    w = a.settings_win
+    assert w is not None and w.window.isVisible(), "the window did not open"
+    for page in [p.id for p in w.pages]:
+        w.show_page(page)
+        assert w.doc is not None and w._rows, page
+    for page, dark in (("general", False), ("screen", False), ("devices", False), ("general", True)):
+        png = w.render_png(page, dark=dark)
+        name = f"{page}-{'dark' if dark else 'light'}"
+        print(f"----- SETTINGS PNG {name} -----")
+        print(base64.b64encode(png).decode("ascii"))
+        print(f"----- END SETTINGS PNG {name} -----")
+    w.show_page("clipboard")
+    clip = cfg.get("clipboard")
+    key, kind, options, ctl = next(c for c in w._controls if c[0] == "clipboard")
+    ctl.setState_(0 if clip else 1)
+    w._changed(ctl)
+    assert cfg.get("clipboard") == (not clip) and a.mi_clip.state == int(not clip)
+    w.close()
+    spin(0.5)
+    assert not w.window.isVisible() and not w.visible
+    return f"{len(w.pages)} pages"
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
 check("Quick panel (AppKit)", quick_panel)
 check("Quick panel on a real status item", status_item_panel)
+check("Settings window (AppKit)", settings_window)
 check("Keychain", keychain)
 check("Menu bar app modules", app_imports)
 check("TLS: GitHub with the macOS root certificates", tls_roots)

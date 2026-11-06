@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.1 — the Settings window (Mac)
+- **Settings window.** **Settings…** (`⌘,`) in the quick panel and the menu opens a window with a sidebar of
+  pages: General, Keyboard and Mouse, Screen and Video, Audio, Clipboard and Files, Network, Paired Devices and
+  Updates. It holds every setting from the menu, follows the light and dark appearance, and changes apply at once.
+- **Quick shortcuts can be changed** in Settings › General (a letter, or off).
+- **The state next to the menu bar icon** (• and Win) can be turned off; warnings (! and ⏸) always show.
+- The pages come from `mirrorway/prefs.py`, tested without AppKit; CI opens the window on macOS and prints pages.
+
 ## 3.1.0 — the quick panel (Mac)
 - **Quick panel.** Clicking the Mirrorway icon in the menu bar opens a panel with the connection status, the
   switch button and one-click tiles for the screen on Windows, the second screen, audio, clipboard, files and

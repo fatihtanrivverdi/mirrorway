@@ -1,0 +1,288 @@
+"""The Settings window's pages, independent of the interface toolkit (tested on every platform).
+
+mac_pages() turns the Mac app's settings and state into pages of groups of items; mac/settings.py draws them.
+An item's key says what a change does: a setting name ("edge_switch"), a quick shortcut ("shortcut:screen") or
+an action ("action:check_updates"); MirrorwayMacApp.apply_setting(key, value) carries it out.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, List, Optional, Sequence, Tuple
+
+from . import quick
+from .i18n import NAMES as LANGUAGE_NAMES
+from .i18n import T
+
+SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+SCROLL_SPEEDS = [0.5, 1.0, 1.5, 2.0, 3.0]
+
+
+def sides():
+    return [("left", T("Left")), ("right", T("Right")), ("top", T("Above")), ("bottom", T("Below"))]
+
+
+def qualities():
+    return [("low", T("Low (smooth, little bandwidth)")), ("medium", T("Medium")), ("high", T("High (sharp text)"))]
+
+
+def codecs():
+    return [("h264", T("H.264 — smooth (recommended)")), ("jpeg", T("JPEG — sharpest text"))]
+
+
+def layouts():
+    return [("auto", T("Automatic")), ("iso", T("ISO (Turkish/European)")), ("ansi", T("ANSI (US)"))]
+
+
+def languages():
+    return [("auto", T("Automatic (system)"))] + list(LANGUAGE_NAMES.items())
+
+
+@dataclass
+class Item:
+    kind: str                     # switch, segmented, popup, button, text, keys
+    key: str
+    title: str
+    value: Any = None
+    options: Sequence[Tuple[Any, str]] = ()
+    detail: str = ""
+    enabled: bool = True
+    button: str = ""              # kind "button": the button's title
+    tone: str = ""                # "ok" / "warn": colour of the detail
+
+    def signature(self) -> tuple:
+        """What decides the controls' layout (a change rebuilds the page; other changes update in place)."""
+        return (self.kind, self.key, bool(self.detail), tuple(str(lab) for _v, lab in self.options))
+
+
+@dataclass
+class Group:
+    title: str
+    items: List[Item]
+    note: str = ""
+
+
+@dataclass
+class Page:
+    id: str
+    title: str
+    symbol: str                   # SF Symbol on the Mac
+    color: str                    # the icon's background in the sidebar
+    groups: List[Group] = field(default_factory=list)
+
+    def items(self) -> List[Item]:
+        return [it for g in self.groups for it in g.items]
+
+    def item(self, key: str) -> Item:
+        return next(it for it in self.items() if it.key == key)
+
+    def signature(self) -> tuple:
+        return tuple((g.title, bool(g.note), tuple(it.signature() for it in g.items)) for g in self.groups)
+
+
+def _option_index(options, value) -> Optional[int]:
+    for i, (v, _label) in enumerate(options):
+        if v == value or (isinstance(v, float) and isinstance(value, (int, float)) and abs(v - value) < 1e-9):
+            return i
+    return None
+
+
+def selected(item: Item) -> Optional[int]:
+    """Index of the item's value among its options (None if it is not one of them)."""
+    return _option_index(item.options, item.value)
+
+
+def _general(cfg, ctx) -> Page:
+    login = ctx.get("login") or {}
+    keys = quick.shortcut_letters(cfg)
+    side = cfg.get("side") if cfg.get("side") in quick.ARROWS else "right"
+    to_win, to_mac = quick.ARROWS[side]
+    letters = [("", T("Off"))] + [(c, quick.mac_shortcut(c)) for c in sorted(quick.MAC_KEYCODES)]
+    items = [
+        Item("segmented", "side", T("Windows is on this side of the screen"), side, sides()),
+        Item("switch", "edge_switch", T("Switch at the screen edge"), bool(cfg.get("edge_switch"))),
+        Item("switch", "login", T("Open at login"), bool(login.get("enabled")),
+             detail="" if login.get("available") else T("Only when Mirrorway runs as Mirrorway.app"),
+             enabled=bool(login.get("available"))),
+        Item("switch", "menubar_state", T("Show the state next to the menu bar icon"),
+             bool(cfg.get("menubar_state", True))),
+        Item("switch", "quick_panel", T("Clicking the icon opens the quick panel"), bool(cfg.get("quick_panel", True)),
+             detail=T("Otherwise the menu opens; right-click always opens the menu")),
+        Item("popup", "language", T("Language"), cfg.get("language") or "auto", languages()),
+    ]
+    shortcuts = [
+        Item("keys", "keys:to_win", T("Switch to Windows"), "⌃⌥" + to_win),
+        Item("keys", "keys:to_mac", T("Back to the Mac"), "⌃⌥" + to_mac),
+        Item("popup", "shortcut:screen", T("Mac screen on Windows"), keys["screen"], letters),
+        Item("popup", "shortcut:second", T("Second screen on or off"), keys["second"], letters),
+        Item("popup", "shortcut:audio", T("Audio on Windows on or off"), keys["audio"], letters),
+        Item("popup", "shortcut:panel", T("Open the Mirrorway panel"), keys["panel"], letters),
+    ]
+    perm_ok = ctx.get("permission", True)
+    perms = [Item("button", "action:perm:" + k, label, button=T("Open…")) for k, label in
+             (("accessibility", T("Accessibility")), ("input", T("Input Monitoring")),
+              ("screen", T("Screen Recording")))]
+    return Page("general", T("General"), "gearshape", "#5B3FD6", [
+        Group("", items),
+        Group(T("Quick shortcuts"), shortcuts,
+              T("Shortcuts work everywhere while Mirrorway runs, also while you control Windows. "
+                "The arrows follow the side of the screen.")),
+        Group(T("Permissions"), perms,
+              "" if perm_ok else T("Mirrorway needs Accessibility and Input Monitoring to send the keyboard and "
+                                   "mouse to Windows. Turn it on in both lists, then restart Mirrorway.")),
+    ])
+
+
+def _keyboard(cfg, st) -> Page:
+    speeds = [(s, f"{s:g}×") for s in SPEEDS]
+    scrolls = [(s, f"{s:g}×") for s in SCROLL_SPEEDS]
+    auto_detail = ""
+    if st.get("connected") and st.get("auto_scale"):
+        auto_detail = T("{scale}× screen ratio (total {total}×)").format(
+            scale=f"{st['auto_scale']:.2f}", total=f"{st.get('effective_speed', 1.0):.2f}")
+    return Page("keyboard", T("Keyboard and Mouse"), "keyboard", "#3B6FD8", [
+        Group(T("Pointer"), [
+            Item("switch", "auto_speed", T("Automatic speed (screen ratio)"), bool(cfg.get("auto_speed", True)),
+                 detail=auto_detail),
+            Item("popup", "speed", T("Pointer speed on Windows"), float(cfg.get("speed") or 1.0), speeds),
+            Item("switch", "gestures", T("Trackpad gestures on Windows"), bool(cfg.get("gestures", True)),
+                 detail=T("Swipes and pinches act on Windows while you control it")),
+        ]),
+        Group(T("Scrolling"), [
+            Item("popup", "scroll_speed", T("Scrolling speed"), float(cfg.get("scroll_speed") or 1.0), scrolls),
+            Item("switch", "invert_scroll", T("Reverse direction"), bool(cfg.get("invert_scroll"))),
+        ]),
+        Group(T("Keyboard"), [
+            Item("switch", "swap_cmd_ctrl", "Cmd → Ctrl, Ctrl → Win", bool(cfg.get("swap_cmd_ctrl"))),
+            Item("switch", "altgr", T("Left Option → AltGr (for @, € etc.)"), cfg.get("left_option") == "altgr"),
+            Item("switch", "option_unicode", T("Special characters with Option (@ € …)"),
+                 bool(cfg.get("option_unicode", True))),
+            Item("popup", "keyboard_layout", T("Keyboard type"), cfg.get("keyboard_layout") or "auto", layouts()),
+        ]),
+    ])
+
+
+def _screen(cfg, st, ctx) -> Page:
+    displays = ctx.get("displays") or [(0, T("Display {n}").format(n=1))]
+    choices = ctx.get("extend_choices") or [(T("Off"), None)]
+    ext_options = [(tuple(v) if v else None, label) for label, v in choices]
+    sel = cfg.get("extend_monitor")
+    return Page("screen", T("Screen and Video"), "display", "#6E56CF", [
+        Group("", [
+            Item("switch", "screen_share", T("Share the Mac's screen"), bool(cfg.get("screen_share")),
+                 detail=T("Windows shows it in the screen window")),
+            Item("popup", "display_index", T("Shared display"), int(cfg.get("display_index") or 0), displays),
+            Item("popup", "quality", T("Picture quality"), cfg.get("quality") or "medium", qualities()),
+            Item("popup", "video_codec", T("Video format"), cfg.get("video_codec") or "h264", codecs()),
+            Item("switch", "adaptive_quality", T("Adjust to the connection automatically (H.264)"),
+                 bool(cfg.get("adaptive_quality", True))),
+        ]),
+        Group(T("Second screen"), [
+            Item("popup", "extend_monitor", T("Windows monitor"), tuple(sel) if isinstance(sel, list) else None,
+                 ext_options, detail=ctx.get("extend_text", "")),
+        ], T("A Windows monitor becomes a second screen for the Mac (a virtual display). Experimental.")),
+    ])
+
+
+def _audio(cfg, st, ctx) -> Page:
+    return Page("audio", T("Audio"), "speaker.wave.2", "#D9485F", [
+        Group("", [
+            Item("switch", "audio", T("Play the Mac's sound on Windows"), bool(cfg.get("audio"))),
+            Item("switch", "audio_mute_mac", T("Mute the Mac's speakers meanwhile"),
+                 bool(cfg.get("audio_mute_mac", True))),
+            Item("text", "audio_state", ctx.get("audio_text") or T("Status: —")),
+        ]),
+    ])
+
+
+def _clipboard(cfg, st, ctx) -> Page:
+    return Page("clipboard", T("Clipboard and Files"), "doc.on.clipboard", "#0F8F80", [
+        Group("", [
+            Item("switch", "clipboard", T("Clipboard sync"), bool(cfg.get("clipboard")),
+                 detail=T("Text, formatted text and images, both ways")),
+            Item("switch", "file_clipboard", T("File copy and paste"), bool(cfg.get("file_clipboard", True)),
+                 detail=T("Copy in Finder, paste in Explorer (and back)")),
+            Item("text", "files_state", ctx.get("files_text") or T("File transfer: —")),
+        ]),
+    ])
+
+
+def _network(cfg, st) -> Page:
+    net = st.get("network") or {}
+    state = net.get("state")
+    tone = "ok" if state == "trusted" else ("warn" if state == "untrusted" else "")
+    extra = f"  (+{', '.join(st['all_ips'][1:])})" if len(st.get("all_ips") or []) > 1 else ""
+    return Page("network", T("Network"), "network", "#2E9E4F", [
+        Group("", [
+            Item("text", "net_state", T("This network"), detail=net.get("text") or T("Network could not be determined"),
+                 tone=tone),
+            Item("switch", "network_lock", T("Work only on the home network"), bool(cfg.get("network_lock", True)),
+                 detail=T("At a café or at work Mirrorway turns itself off")),
+            Item("button", "action:trust_network", T("Trust this network"), button=T("Trust")),
+            Item("button", "action:reset_networks", T("Reset trusted networks (keep only this one)"),
+                 button=T("Reset…")),
+        ]),
+        Group(T("This Mac"), [
+            Item("button", "action:copy_ip", T("Address"), detail=f"{st.get('ip', '')}:{st.get('port', '')}{extra}",
+                 button=T("Copy")),
+        ]),
+    ])
+
+
+def _devices(st) -> Page:
+    devs = st.get("devices") or []
+    items = []
+    for d in devs:
+        state = T("connected") if d["id"] == st.get("client_device") else ""
+        if d.get("pending"):
+            state = T("verifying")
+        detail = d["id"] + (f" · {state}" if state else "")
+        items.append(Item("button", "action:remove_device:" + d["id"], d.get("name") or d["id"], detail=detail,
+                          button=T("Remove…"), tone="ok" if state == T("connected") else ""))
+    if not items:
+        items.append(Item("text", "no_devices", T("No paired devices")))
+    p = st.get("pairing")
+    pair = Item("button", "action:pair", T("Pair a new device"), button=T("Pair…"),
+                detail=T("Code {code} · {time}").format(code=p["display"], time=quick.clock(p.get("remaining", 0)))
+                if p else T("Shows a 6-digit code to enter on Windows"), tone="ok" if p else "")
+    return Page("devices", T("Paired Devices"), "laptopcomputer.and.iphone", "#D9822B", [
+        Group("", items),
+        Group("", [pair]),
+    ])
+
+
+def _updates(cfg, ctx) -> Page:
+    u = ctx.get("update") or {}
+    available = u.get("available")
+    prev = u.get("previous")
+    return Page("updates", T("Updates"), "arrow.triangle.2.circlepath", "#6B6B70", [
+        Group("", [
+            Item("text", "version", T("Version"), detail=u.get("text") or f"Mirrorway {ctx.get('version', '')}"),
+            Item("button", "action:check_updates", T("Check for updates"),
+                 button=T("Checking…") if u.get("busy") else T("Check"), enabled=not u.get("busy")),
+            Item("button", "action:install_update",
+                 T("Install {version} and restart").format(version=available) if available else T("No new version"),
+                 button=T("Install"), enabled=bool(available), tone="ok" if available else ""),
+            Item("switch", "auto_update_check", T("Check automatically once a day"),
+                 bool(cfg.get("auto_update_check", True))),
+            Item("button", "action:rollback",
+                 T("Return to the previous version ({version})").format(version=prev) if prev
+                 else T("Return to the previous version"), button=T("Return…"), enabled=bool(prev)),
+        ]),
+        Group(T("Help"), [
+            Item("button", "action:diag", T("Diagnostics bundle"), detail=T("Logs and settings in one zip, "
+                                                                          "without codes or keys"),
+                 button=T("Create")),
+            Item("button", "action:show_log", T("Log files"), button=T("Show")),
+        ]),
+    ])
+
+
+def mac_pages(cfg, st: dict, ctx: Optional[dict] = None) -> List[Page]:
+    """The Mac Settings window.
+
+    ctx: displays [(index, label)], extend_choices [(label, value)], extend_text, audio_text, files_text,
+         login {"available", "enabled"}, update {"text", "busy", "available", "previous"}, permission, version
+    """
+    ctx = ctx or {}
+    return [_general(cfg, ctx), _keyboard(cfg, st), _screen(cfg, st, ctx), _audio(cfg, st, ctx),
+            _clipboard(cfg, st, ctx), _network(cfg, st), _devices(st), _updates(cfg, ctx)]

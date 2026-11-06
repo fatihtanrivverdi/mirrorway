@@ -85,7 +85,7 @@ Click the **Mirrorway icon** in the menu bar to open the quick panel:
 - **Switch to Windows** / **Back to the Mac**,
 - tiles that turn things on and off with one click: **Screen** (the Mac's screen window on Windows), **Second screen**, **Audio**, **Clipboard**, **Files** and **Wake Windows**,
 - **Pair a New Device…**, **Network** (trust this network, home network only) and **Disconnect**,
-- **Settings…** (`⌘,`) opens the full menu; **right-click** (or Control-click) the icon to open it directly.
+- **Settings…** (`⌘,`) opens the Settings window; **right-click** (or Control-click) the icon for the full menu.
 
 Quick shortcuts work anywhere, also while you control Windows:
 
@@ -96,7 +96,11 @@ Quick shortcuts work anywhere, also while you control Windows:
 | `⌃ + ⌥ + A` | Play the Mac's sound on Windows, or back on the Mac |
 | `⌃ + ⌥ + M` | Open or close the quick panel |
 
-The letters can be changed or turned off with the `shortcuts` setting in `~/.mirrorway/mac.json` (for example `"shortcuts": {"screen": "s", "second": "", "audio": "a", "panel": "m"}`). To keep the classic menu on a left click, turn off **Mirrorway › Click Opens the Quick Panel**.
+Change the letters or turn a shortcut off in **Settings › General › Quick shortcuts**. To keep the classic menu on a left click, turn off **Clicking the icon opens the quick panel** there (or **Mirrorway › Click Opens the Quick Panel** in the menu).
+
+### Settings
+
+**Settings…** in the panel or the menu (`⌘,`) opens the Settings window. Its pages hold everything the menu has: **General** (the side of Windows, the screen edge, open at login, language, quick shortcuts, permissions), **Keyboard and Mouse**, **Screen and Video** (including the second screen), **Audio**, **Clipboard and Files**, **Network**, **Paired Devices** and **Updates** (with the diagnostics bundle). Changes apply at once.
 
 ### Switching to Windows and back
 
@@ -262,10 +266,10 @@ mirrorway/
   clipsync.py, richclip.py clipboard sync: format bundles, chunked transfer, CF_HTML and DIB conversions
   filexfer.py              file copy and paste: manifests, safe paths, a separate encrypted channel
   i18n.py, i18n_tr.py      interface language (English source texts, Turkish catalog)
-  quick.py                 quick panel content and quick shortcuts (independent of the interface toolkit)
+  quick.py, prefs.py       quick panel and Settings window content, quick shortcuts (toolkit independent)
   assets/                  menu bar and Windows icons, the logo for the panel
   mac/                     router.py (input logic), tap.py (CGEventTap), capture.py, server.py, app.py (rumps),
-                           panel.py (the quick panel, AppKit), vdisplay.py (virtual display helper),
+                           panel.py + settings.py (quick panel, Settings window), vdisplay.py,
                            extend_mgr.py (second screen life cycle)
   win/                     remote.py (input logic), backend.py + winapi.py (SendInput), client.py, sdlview.py,
                            viewer.py, app.py (Tk + pystray)
