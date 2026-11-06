@@ -10,9 +10,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 
+# Ends the script without interpreter shutdown: background threads of the fake platform (and C extensions torn
+# down under them) have crashed the process after the script had finished ("free(): invalid pointer").
+_EXIT = "\nimport os as _os, sys as _sys\n_sys.stdout.flush()\n_sys.stderr.flush()\n_os._exit(0)\n"
+
+
 def run_script(code: str):
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([ROOT, HERE]))
-    r = subprocess.run([sys.executable, "-c", textwrap.dedent(code)], capture_output=True, text=True,
+    r = subprocess.run([sys.executable, "-c", textwrap.dedent(code) + _EXIT], capture_output=True, text=True,
                        env=env, timeout=60)
     assert r.returncode == 0, r.stdout + r.stderr
     return r.stdout
