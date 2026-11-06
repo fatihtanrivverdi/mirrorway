@@ -39,7 +39,7 @@ Mirrorway is written in Python. The Mac side runs on macOS 11 or later (audio ne
 ## 1. Installing on the Mac
 
 1. Download **`Mirrorway-<version>-mac.zip`** from the [latest release](https://github.com/fatihtanrivverdi/mirrorway/releases/latest) and open it.
-2. Double-click **`install-mac.command`**. macOS may block scripts downloaded from the internet; if it does, right-click the file and choose **Open**, or open **System Settings › Privacy & Security** and click **Open Anyway**.
+2. Double-click **`install-mac.command`**. macOS blocks unsigned scripts downloaded from the internet; if it does, open **System Settings › Privacy & Security** and click **Open Anyway** next to it (on macOS 15 right-click › Open no longer works), or type `bash ` in Terminal, drag `install-mac.command` into the window and press Return.
    - The script installs `~/Applications/Mirrorway.app` and puts the code in `~/.mirrorway/app`.
    - Python 3 is needed. If `python3 --version` prints nothing in Terminal, install it from [python.org](https://www.python.org/downloads/).
 3. On first start Mirrorway installs its packages (1–2 minutes, a notification appears). Then the **Mirrorway icon** appears in the menu bar.
