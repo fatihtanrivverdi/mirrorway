@@ -27,7 +27,7 @@ log = logging.getLogger("mirrorway.panel")
 
 NSRectEdgeMinY = 1
 
-W, PAD = 352, 12
+W, PAD = 364, 12
 INNER = W - 2 * PAD
 TILE_W, TILE_H, GAP = (INNER - 16) / 3.0, 86, 8
 ROW_H = 38
@@ -113,22 +113,26 @@ class MirrorwayPanelBox(NSView):
 
 
 class MirrorwayPanelTarget(NSObject):
-    """Receives button clicks, menu choices and the popover's close notice (mw_* are Python callables)."""
+    """Receives button clicks, menu choices and the popover's close notice (mw_* are Python callables).
+    Errors are logged here: an exception must not travel back into AppKit."""
 
     def clicked_(self, sender):
-        fn = self.mw_click
-        if fn is not None:
-            fn(int(sender.tag()))
+        _call(self.mw_click, int(sender.tag()))
 
     def popoverDidClose_(self, _notification):
-        fn = self.mw_closed
-        if fn is not None:
-            fn()
+        _call(self.mw_closed)
 
     def menuDidClose_(self, _menu):
-        fn = self.mw_menu_closed
-        if fn is not None:
-            fn()
+        _call(self.mw_menu_closed)
+
+
+def _call(fn, *args) -> None:
+    if fn is None:
+        return
+    try:
+        fn(*args)
+    except Exception:
+        log.exception("panel callback failed")
 
 
 def make_target(click=None, closed=None, menu_closed=None):
@@ -270,8 +274,8 @@ class QuickPanel:
             icon = _icon(box, NSMakeRect(10, 10, 20, 20), key, 15, accent)
             keys = _label(box, NSMakeRect(TILE_W - 52, 12, 42, 14), 10.5, NSFontWeightMedium,
                           color=NSColor.tertiaryLabelColor(), align=NSTextAlignmentRight)
-            title = _label(box, NSMakeRect(10, 44, TILE_W - 14, 17), 12.5, NSFontWeightSemibold)
-            sub = _label(box, NSMakeRect(10, 62, TILE_W - 14, 15), 11, color=NSColor.secondaryLabelColor())
+            title = _label(box, NSMakeRect(10, 44, TILE_W - 12, 17), 12.5, NSFontWeightSemibold)
+            sub = _label(box, NSMakeRect(10, 62, TILE_W - 12, 15), 11, color=NSColor.secondaryLabelColor())
             self._button(box, NSMakeRect(0, 0, TILE_W, TILE_H), "tile:" + key)
             self.tiles[key] = (box, icon, title, sub, keys)
 
@@ -323,7 +327,8 @@ class QuickPanel:
         self.primary.setAlphaValue_(1.0 if p.enabled else 0.45)
         self._buttons["primary"].setEnabled_(p.enabled)
 
-        accent = _rgb("#5B3FD6")
+        # the violet of the off tiles' icons: lighter in dark appearance (contrast)
+        accent = _rgb("#A898FF") if is_dark(self.root) else _rgb("#5B3FD6")
         for t in m.tiles:
             box, icon, title, sub, keys = self.tiles[t.key]
             style = "tile_on" if t.on else "tile_off"
@@ -440,12 +445,14 @@ class QuickPanel:
                 log.exception("panel menu action failed")
 
     # ---- image (CI and diagnostics) --------------------------------------------------------------------------
-    def render_png(self, dark: bool = False) -> bytes:
-        """The panel as a PNG on its own background (does not need a window or the screen)."""
+    def render_png(self, dark: bool = False, model: Optional[quick.Panel] = None) -> bytes:
+        """The panel (filled from model, if given) as a PNG on its own background; needs no window or screen."""
         view = self.root
         view.mw_style = "panel"
         view.setAppearance_(NSAppearance.appearanceNamed_(NSAppearanceNameDarkAqua if dark
                                                           else NSAppearanceNameAqua))
+        if model is not None:
+            self.update(model)
         try:
             rect = view.bounds()
             rep = view.bitmapImageRepForCachingDisplayInRect_(rect)

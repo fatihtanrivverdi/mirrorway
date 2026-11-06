@@ -764,10 +764,13 @@ class MirrorwayMacApp(rumps.App):
 
     def quick_action(self, action: str) -> None:
         log.info("Quick shortcut: %s", action)
-        if action == "panel":
-            self.toggle_panel()
-        else:
-            self.panel_action("tile:" + action)
+        try:
+            if action == "panel":
+                self.toggle_panel()
+            else:
+                self.panel_action("tile:" + action)
+        except Exception:
+            log.exception("Quick shortcut %s failed", action)
 
     def toggle_screen(self, st=None) -> None:
         """Open or close the Mac's screen window on Windows."""
@@ -912,8 +915,12 @@ class MirrorwayMacApp(rumps.App):
                                     or bool(ev.modifierFlags() & NSEventModifierFlagControl))
         if right or self.panel is None or not self.cfg.get("quick_panel", True):
             self.show_menu()
-        else:
+            return
+        try:
             self.toggle_panel()
+        except Exception:
+            log.exception("Could not open the panel; showing the menu")
+            self.show_menu()
 
     def toggle_panel(self) -> None:
         item = self._status_item()

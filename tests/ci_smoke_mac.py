@@ -337,8 +337,7 @@ def quick_panel():
     cfg = {"side": "right", "screen_share": True, "clipboard": True, "file_clipboard": True}
     sizes = []
     for name, dark, state in (("light", False, st), ("dark", True, dict(st, remote=True, video=False))):
-        panel.update(quick.mac_panel(state, cfg, version="ci"))
-        png = panel.render_png(dark=dark)
+        png = panel.render_png(dark=dark, model=quick.mac_panel(state, cfg, version="ci"))
         img = Image.open(io.BytesIO(png))
         assert img.size[0] >= W and img.size[1] >= H, img.size
         sizes.append(f"{name} {img.size[0]}×{img.size[1]}")
@@ -351,8 +350,48 @@ def quick_panel():
     return ", ".join(sizes)
 
 
+def status_item_panel():
+    """The app's own path on a real status item: the panel takes over the icon's click, the icon and
+    Control + Option + M open the panel."""
+    from types import SimpleNamespace
+
+    from AppKit import NSApplication, NSDate, NSRunLoop, NSStatusBar
+    from mirrorway.config import Config, MAC_DEFAULTS
+    from mirrorway.mac import app as A
+
+    def spin(seconds):
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(seconds))
+
+    NSApplication.sharedApplication().setActivationPolicy_(1)
+    a = A.MirrorwayMacApp(Config("mac-ci-panel", MAC_DEFAULTS))
+    item = NSStatusBar.systemStatusBar().statusItemWithLength_(-1)
+    item.button().setTitle_("MW")
+    item.setMenu_(a._menu._menu)                    # as rumps leaves it
+    a._nsapp = SimpleNamespace(nsstatusitem=item)
+    try:
+        a._install_panel()
+        assert a.panel is not None, "the panel was not set up"
+        assert item.menu() is None, "the menu still takes the clicks"
+        item.button().performClick_(None)
+        spin(0.6)
+        by_click = a.panel.is_shown()
+        a.panel.close()
+        spin(0.6)
+        closed = not a.panel.is_shown()
+        a.quick_action("panel")
+        spin(0.6)
+        by_key = a.panel.is_shown()
+        a.panel.close()
+        spin(0.3)
+    finally:
+        NSStatusBar.systemStatusBar().removeStatusItem_(item)
+    assert by_click and closed and by_key, (by_click, closed, by_key)
+    return "click opens it, close works, Control + Option + M opens it"
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
 check("Quick panel (AppKit)", quick_panel)
+check("Quick panel on a real status item", status_item_panel)
 check("Keychain", keychain)
 check("Menu bar app modules", app_imports)
 check("TLS: GitHub with the macOS root certificates", tls_roots)
