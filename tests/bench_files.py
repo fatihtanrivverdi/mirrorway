@@ -125,6 +125,46 @@ def paced_sender(src: str, port: int, k1: bytes, k2: bytes, rate: float) -> None
     sock.close()
 
 
+def paced_receiver(port: int, rate: float) -> None:
+    """Reads (and drops) everything, no faster than `rate`: the far end of a slow link, for the sending side."""
+    sock = socket.create_connection(("127.0.0.1", port))
+    tune_socket(sock)
+    FX.tune_file_socket(sock)
+    t0, got = time.monotonic(), 0
+    while True:
+        data = sock.recv(16384)
+        if not data:
+            break
+        got += len(data)
+        ahead = got / rate - (time.monotonic() - t0)
+        if ahead > 0.002:
+            time.sleep(ahead)
+    sock.close()
+
+
+def run_paced_send(way: str, src: Path, rate: float) -> float:
+    """Sending speed (MB/s) into a `rate` link, the sending socket set up as `way` does it."""
+    import multiprocessing as mp
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    proc = mp.get_context("spawn").Process(target=paced_receiver, args=(srv.getsockname()[1], rate))
+    proc.start()
+    conn, _ = srv.accept()
+    srv.close()
+    tune_socket(conn)
+    tx = SecureChannel(conn, send_key=os.urandom(32), recv_key=os.urandom(32), role=b"F")
+    _prepare(tx, way)
+    try:
+        st = FX.send_files(tx, FX.build_manifest([str(src)]), packed=True)
+    finally:
+        tx.close()
+        proc.join(60)
+    speed = st.bytes / st.elapsed / 1048576
+    print(f"  sending, {way} socket: {speed:.1f} MB/s ({st.text()})", flush=True)
+    return speed
+
+
 def run_paced(way: str, src: Path, dest: Path, rate: float) -> float:
     """Receiving speed (MB/s) over a `rate` link, the receiving socket set up as `way` does it."""
     import multiprocessing as mp
@@ -255,13 +295,16 @@ def main() -> int:
         if a.link:
             print(f"Over a {a.link:.0f} MB/s link (the sender in its own process):")
             speeds = {"3.2.0": [], "3.2.1": []}
+            sends = {"3.2.0": [], "3.2.1": []}
             for rnd in range(2):
                 for way in (("3.2.0", "3.2.1") if rnd % 2 == 0 else ("3.2.1", "3.2.0")):
                     dest = base / f"link-{way}-{rnd}"
                     speeds[way].append(run_paced(way, src, dest, a.link * 1048576))
                     shutil.rmtree(dest, ignore_errors=True)
+                    sends[way].append(run_paced_send(way, src, a.link * 1048576))
                     time.sleep(1)
-            print(f"LINK: 3.2.0 socket {max(speeds['3.2.0']):.1f} MB/s, current {max(speeds['3.2.1']):.1f} MB/s "
+            print(f"LINK receiving: 3.2.0 socket {max(speeds['3.2.0']):.1f} MB/s, current {max(speeds['3.2.1']):.1f} "
+                  f"MB/s; sending: 3.2.0 socket {max(sends['3.2.0']):.1f} MB/s, current {max(sends['3.2.1']):.1f} MB/s "
                   f"(link {a.link:.0f} MB/s)")
         best = {way: statistics.median(ts) for way, ts in times.items()}
         ratio = best["3.1"] / best["3.2"]
