@@ -220,7 +220,7 @@ def test_sync_hands_files_to_transfer_or_falls_back_to_names():
 
 
 # ---- end to end: Mac server + Windows client, a real file channel ---------------------------------------------
-def test_end_to_end_file_copy_both_ways(sample, tmp_path):
+def test_end_to_end_file_copy_both_ways(sample, tmp_path, monkeypatch):
     from mirrorway.geometry import Rect
     from mirrorway.mac.server import MirrorwayServer
     from mirrorway.win.client import ControlClient, Resolver
@@ -228,6 +228,13 @@ def test_end_to_end_file_copy_both_ways(sample, tmp_path):
     from test_e2e import free_port, wait
     from test_router_remote import FakeMac, FakeWin, mac_cfg
 
+    sends = []
+    real_send = FX.send_files
+
+    def spy(*args, **kw):
+        sends.append(kw.get("packed"))
+        return real_send(*args, **kw)
+    monkeypatch.setattr(FX, "send_files", spy)
     port = free_port()
     mac_clip, win_clip = FakeRich(), FakeRich()
     srv = MirrorwayServer(mac_cfg(port=port, pair_code="ABCD-EFGH-JKMN", clipboard=True), FakeMac(),
@@ -275,6 +282,7 @@ def test_end_to_end_file_copy_both_ways(sample, tmp_path):
         wait(lambda: srv.file_event is not None or srv.status()["files"]["state"] == "done", msg="Mac notification")
         st = srv.status()["files"]
         assert st["dir"] == "in" and st["state"] == "done" and st["percent"] == 100
+        assert sends == [True, True]                         # both 3.2: small files packed both ways
 
         # if file copy and paste is off on the Mac, files from Windows are refused
         srv.cfg.set("file_clipboard", False)
@@ -316,3 +324,214 @@ def test_mac_notification_uses_osascript():
     def boom(*a, **k):
         raise OSError("missing")
     assert N.notify("x", "y", popen=boom) is False
+
+
+# ---- 3.2: files read ahead and written by several threads, small files packed ------------------------------------
+def _many(root, n=300, seed=7):
+    import random
+    rnd = random.Random(seed)
+    root.mkdir(parents=True)
+    for i in range(n):
+        d = root / f"pkg{i % 7}" / f"sub{i % 3}"
+        d.mkdir(parents=True, exist_ok=True)
+        size = rnd.choice([0, 1, 300, 4096, 9000, 70000, FX.SMALL_FILE, FX.SMALL_FILE + 1])
+        (d / f"f{i:04d}.py").write_bytes(rnd.randbytes(size))
+    (root / "big.bin").write_bytes(os.urandom(FX.CHUNK * 3 + 17))
+    (root / "empty_dir").mkdir()
+    return root
+
+
+class Recorder(Pipe):
+    """Counts the frames the sender sends."""
+
+    def __init__(self, inbox, outbox):
+        super().__init__(inbox, outbox)
+        self.types = []
+
+    def send(self, mtype, payload=b""):
+        self.types.append(mtype)
+        super().send(mtype, payload)
+
+
+def _transfer(man, dest, packed, readers=FX.READERS, writers=FX.WRITERS, ropen=FX._open_read, wopen=FX._open_write):
+    a, b = queue.Queue(), queue.Queue()
+    tx, rx = Recorder(a, b), Pipe(b, a)
+    out = {}
+    t = threading.Thread(target=lambda: out.update(st=FX.send_files(tx, man, packed=packed, readers=readers,
+                                                                     opener=ropen)))
+    t.start()
+    roots, info = FX.recv_files(rx, dest, windows=False, writers=writers, opener=wopen)
+    t.join()
+    return roots, info, out["st"], tx.types
+
+
+@pytest.mark.parametrize("packed", [True, False])
+def test_many_small_files_roundtrip(tmp_path, packed):
+    src = _many(tmp_path / "src" / "project")
+    man = FX.build_manifest([str(src)])
+    roots, info, st, types = _transfer(man, tmp_path / "dst", packed)
+    assert _tree(roots[0]) == _tree(src)
+    assert st.bytes == man.total == info["stats"].bytes and info["stats"].packed is packed
+    assert st.files == info["stats"].files == sum(1 for i in man.items if not i["dir"])
+    data = types.count(FX.MSG_FILE_DATA)
+    if packed:
+        large = [i["size"] for i in man.items if not i["dir"] and i["size"] > FX.SMALL_FILE]
+        assert data == sum(-(-s // FX.CHUNK) for s in large)            # only the large files go in blocks
+        assert types.count(FX.MSG_FILE_PACK) < 40 and "packed" in st.text()
+    else:
+        assert FX.MSG_FILE_PACK not in types and data > 250
+    assert types[0] == FX.MSG_FILE_MANIFEST and types[-1] == FX.MSG_FILE_END
+
+
+def _old_recv(ch, dest):
+    """The receiver of 3.1 and earlier (DATA blocks only, one file at a time)."""
+    import json
+    man = json.loads(ch.recv()[1].decode())
+    for it in man["items"]:
+        path = dest.joinpath(*it["path"].split("/"))
+        if it["dir"]:
+            path.mkdir(parents=True, exist_ok=True)
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        left = it["size"]
+        with open(path, "wb") as f:
+            while left > 0:
+                mtype, block = ch.recv()
+                assert mtype == FX.MSG_FILE_DATA and 0 < len(block) <= left
+                f.write(block)
+                left -= len(block)
+    assert ch.recv()[0] == FX.MSG_FILE_END
+
+
+def _old_send(ch, man, chunk=256 * 1024):
+    """The sender of 3.1 and earlier."""
+    ch.send_json(FX.MSG_FILE_MANIFEST, {"id": man.id, "items": man.items, "total": man.total})
+    for item, src in zip(man.items, man.sources):
+        if item["dir"]:
+            continue
+        with open(src, "rb") as f:
+            while True:
+                block = f.read(chunk)
+                if not block:
+                    break
+                ch.send(FX.MSG_FILE_DATA, block)
+    ch.send_json(FX.MSG_FILE_END, {"ok": True})
+
+
+def test_compatible_with_older_versions(tmp_path):
+    src = _many(tmp_path / "src" / "project", n=120)
+    man = FX.build_manifest([str(src)])
+    # a 3.2 sender to a 3.1 receiver (no "pack" asked for: DATA blocks only)
+    tx, rx = pipes()
+    t = threading.Thread(target=FX.send_files, args=(tx, man), kwargs={"packed": False})
+    t.start()
+    _old_recv(rx, tmp_path / "old")
+    t.join()
+    assert _tree(tmp_path / "old" / "project") == _tree(src)
+    # a 3.1 sender to a 3.2 receiver
+    tx, rx = pipes()
+    t = threading.Thread(target=_old_send, args=(tx, man))
+    t.start()
+    roots, info = FX.recv_files(rx, tmp_path / "new", windows=True)
+    t.join()
+    assert _tree(roots[0]) == _tree(src) and info["stats"].packed is False
+
+
+def test_pack_frames_are_checked(tmp_path):
+    import struct
+    items = [{"path": "d", "size": 0, "dir": True}, {"path": "d/a", "size": 3, "dir": False},
+             {"path": "d/b", "size": 2, "dir": False}, {"path": "d/c", "size": FX.CHUNK + 1, "dir": False}]
+
+    def pack(sizes, body):
+        return struct.pack(f">{len(sizes) + 1}I", len(sizes), *sizes) + body
+    bad = [
+        [(FX.MSG_FILE_PACK, pack([3, 3], b"abcxyz"))],                     # b is 2 bytes, not 3
+        [(FX.MSG_FILE_PACK, pack([3, 2], b"abcxyz"))],                     # more content than the sizes
+        [(FX.MSG_FILE_PACK, pack([], b""))],                               # an empty pack
+        [(FX.MSG_FILE_PACK, b"\x00\x00")],                                 # cut off
+        [(FX.MSG_FILE_PACK, pack([3, 2], b"abcxy")), (FX.MSG_FILE_DATA, b"x"),
+         (FX.MSG_FILE_PACK, pack([1], b"y"))],                             # a pack in the middle of a file
+        [(FX.MSG_FILE_PACK, pack([3, 2], b"abcxy")), (FX.MSG_FILE_PACK, pack([FX.CHUNK + 1], bytes(FX.CHUNK + 1))),
+         (FX.MSG_FILE_PACK, pack([1], b"z"))],                             # content past the last file
+        [(FX.MSG_FILE_DATA, b"")],                                         # an empty block
+    ]
+    for k, frames in enumerate(bad):
+        tx, rx = pipes()
+        tx.send_json(FX.MSG_FILE_MANIFEST, {"id": "x", "items": items, "pack": True})
+        for mtype, payload in frames:
+            tx.send(mtype, payload)
+        tx.send_json(FX.MSG_FILE_END, {"ok": True})
+        dest = tmp_path / f"bad{k}"
+        with pytest.raises(FX.TransferError):
+            FX.recv_files(rx, dest, windows=False)
+        assert not dest.exists(), k
+    tx, rx = pipes()
+    tx.send_json(FX.MSG_FILE_MANIFEST, {"id": "x", "items": items, "pack": True})
+    tx.send(FX.MSG_FILE_PACK, pack([3, 2], b"abcxy"))
+    tx.send(FX.MSG_FILE_DATA, b"1" * FX.CHUNK)
+    tx.send(FX.MSG_FILE_DATA, b"2")
+    tx.send_json(FX.MSG_FILE_END, {"ok": True})
+    roots, _info = FX.recv_files(rx, tmp_path / "good", windows=False)
+    assert _tree(roots[0]) == {"a": b"abc", "b": b"xy", "c": b"1" * FX.CHUNK + b"2"}
+
+
+def test_parallel_reads_and_writes_hide_slow_file_opening(tmp_path):
+    """Opening a file costs ~3 ms here (like a virus scan on Windows): with several threads that cost overlaps."""
+    src = tmp_path / "src" / "many"
+    src.mkdir(parents=True)
+    for i in range(150):
+        (src / f"{i:03d}.txt").write_bytes(b"x" * (i * 37))
+    man = FX.build_manifest([str(src)])
+
+    def slow(fn):
+        def opener(path):
+            time.sleep(0.003)
+            return fn(path)
+        return opener
+    times = {}
+    for name, threads in (("one", 1), ("many", 8)):
+        t = time.monotonic()
+        roots, info, st, _ = _transfer(man, tmp_path / name, True, readers=threads, writers=threads,
+                                       ropen=slow(FX._open_read), wopen=slow(FX._open_write))
+        times[name] = time.monotonic() - t
+        assert _tree(roots[0]) == _tree(src)
+    assert times["many"] * 2.5 < times["one"], times
+
+
+def test_sender_errors_and_cancel(tmp_path):
+    src = _many(tmp_path / "src" / "p", n=40)
+    man = FX.build_manifest([str(src)])
+    victim = next(s for i, s in zip(man.items, man.sources) if not i["dir"] and i["size"] > 100)
+    with open(victim, "r+b") as f:
+        f.truncate(10)                                                 # got shorter after the copy
+    tx, _rx = pipes()
+    with pytest.raises(FX.TransferError, match="shorter"):
+        FX.send_files(tx, man, packed=True)
+    os.remove(victim)
+    with pytest.raises(OSError):
+        FX.send_files(pipes()[0], man, packed=True)
+    cancel = threading.Event()
+    cancel.set()
+    with pytest.raises(FX.TransferError, match="cancelled"):
+        FX.send_files(pipes()[0], FX.build_manifest([str(src)]), cancel=cancel, packed=True)
+    tx, rx = pipes()
+    FX.send_files(tx, FX.build_manifest([str(src)]), packed=True)
+    with pytest.raises(FX.TransferError, match="cancelled"):
+        FX.recv_files(rx, tmp_path / "c", windows=False, cancel=cancel)
+    assert not (tmp_path / "c").exists()
+
+
+def test_manifest_order_matches_a_folder_walk(tmp_path):
+    src = _many(tmp_path / "src" / "w", n=60)
+    (src / "pkg1" / "sub0" / "deeper" / "deepest").mkdir(parents=True)
+    (src / "pkg1" / "sub0" / "deeper" / "z.txt").write_bytes(b"z")
+    man = FX.build_manifest([str(src)])
+    want = ["w"]
+    for cur, dirs, files in os.walk(src):
+        dirs.sort()
+        rel = os.path.relpath(cur, src)
+        prefix = "w" if rel == "." else "w/" + rel.replace(os.sep, "/")
+        want += [prefix + "/" + d for d in dirs] + [prefix + "/" + f for f in sorted(files)]
+    assert [i["path"] for i in man.items] == want
+    sizes = {i["path"]: i["size"] for i in man.items if not i["dir"]}
+    assert sizes["w/big.bin"] == FX.CHUNK * 3 + 17

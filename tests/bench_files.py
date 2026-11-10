@@ -1,0 +1,172 @@
+"""Speed test for copying a folder of many small files (Kapı 6): the 3.1 way and the 3.2 way, through a real encrypted
+connection on this machine (localhost).
+
+The folder looks like a real one (a Python app folder: 3,641 files, half under 4 KB, 94% under 64 KB, a few large
+ones). After a warm-up, both ways run in turn (--rounds, the order swapped every round) and the median time of each
+counts. The 3.2 way has to be at least --min-ratio times as fast, otherwise the exit code is 1.
+
+Run: python tests/bench_files.py [--files 5000] [--min-ratio 1.5] [--dir DIR]
+"""
+import argparse
+import json
+import os
+import random
+import shutil
+import statistics
+import socket
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from mirrorway import filexfer as FX  # noqa: E402
+from mirrorway.protocol import SecureChannel, tune_socket  # noqa: E402
+
+BUCKETS = ((0.48, 1, 4096), (0.28, 4097, 16384), (0.18, 16385, 65536), (0.05, 65537, 262144),
+           (0.01, 262145, 1048576))
+
+
+def make_folder(root: Path, n: int, seed: int = 1) -> int:
+    rnd = random.Random(seed)
+    noise = os.urandom(1 << 21)
+    root.mkdir(parents=True)
+    dirs = [root]
+    total = 0
+    for i in range(n):
+        if i % 12 == 0:
+            parent = rnd.choice(dirs[-30:]) if len(dirs) > 1 and rnd.random() < 0.6 else root
+            d = parent / f"pkg{len(dirs)}"
+            d.mkdir()
+            dirs.append(d)
+        r, acc = rnd.random(), 0.0
+        lo, hi = 1, 4096
+        for p, a, b in BUCKETS:
+            acc += p
+            if r <= acc:
+                lo, hi = a, b
+                break
+        size = rnd.randint(lo, hi)
+        off = rnd.randint(0, len(noise) - size)
+        (dirs[-1] / f"m{i:05d}.py").write_bytes(noise[off:off + size])
+        total += size
+    for k, mb in enumerate((8, 12)):                         # a few large files, like .dll/.pyd
+        (root / f"large{k}.bin").write_bytes(os.urandom(mb << 20))
+        total += mb << 20
+    return total
+
+
+def channel_pair():
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    a = socket.create_connection(srv.getsockname())
+    b, _ = srv.accept()
+    srv.close()
+    for s in (a, b):
+        tune_socket(s)
+        FX.tune_file_socket(s)
+    k1, k2 = os.urandom(32), os.urandom(32)
+    return (SecureChannel(a, send_key=k1, recv_key=k2, role=b"F"),
+            SecureChannel(b, send_key=k2, recv_key=k1, role=b"F"))
+
+
+# ---- 3.1 (one file after the other on both sides) ------------------------------------------------------------
+def old_send(ch, man, chunk=256 * 1024):
+    ch.send_json(FX.MSG_FILE_MANIFEST, {"id": man.id, "items": man.items, "total": man.total})
+    for item, src in zip(man.items, man.sources):
+        if item["dir"]:
+            continue
+        left = item["size"]
+        with open(src, "rb") as f:
+            while left > 0:
+                block = f.read(min(chunk, left))
+                ch.send(FX.MSG_FILE_DATA, block)
+                left -= len(block)
+    ch.send_json(FX.MSG_FILE_END, {"ok": True})
+
+
+def old_recv(ch, dest: Path):
+    man = json.loads(ch.recv()[1].decode())
+    for it in man["items"]:
+        path = dest.joinpath(*it["path"].split("/"))
+        if it["dir"]:
+            path.mkdir(parents=True, exist_ok=True)
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        left = it["size"]
+        with open(path, "wb") as f:
+            while left > 0:
+                mtype, block = ch.recv()
+                f.write(block)
+                left -= len(block)
+    ch.recv()
+
+
+def run(way: str, src: Path, dest: Path) -> float:
+    man = FX.build_manifest([str(src)])
+    tx, rx = channel_pair()
+    err = []
+
+    def sender():
+        try:
+            if way == "3.1":
+                old_send(tx, man)
+            else:
+                FX.send_files(tx, man, packed=True)
+        except Exception as exc:                             # noqa: BLE001
+            err.append(exc)
+    t0 = time.monotonic()
+    th = threading.Thread(target=sender)
+    th.start()
+    if way == "3.1":
+        old_recv(rx, dest)
+        stats = ""
+    else:
+        _roots, info = FX.recv_files(rx, dest, windows=os.name == "nt")
+        stats = info["stats"].text()
+    th.join()
+    took = time.monotonic() - t0
+    tx.close()
+    rx.close()
+    if err:
+        raise err[0]
+    print(f"  {way}: {took:.2f} s, {man.total / took / 1048576:.1f} MB/s {stats}", flush=True)
+    return took
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--files", type=int, default=5000)
+    ap.add_argument("--min-ratio", type=float, default=1.0)
+    ap.add_argument("--rounds", type=int, default=4)
+    ap.add_argument("--dir", help="where to make the test folder (default: a temporary folder)")
+    a = ap.parse_args()
+    base = Path(tempfile.mkdtemp(prefix="mirrorway-bench-", dir=a.dir))
+    try:
+        src = base / "src" / "project"
+        total = make_folder(src, a.files)
+        print(f"Test folder: {a.files} small files + 2 large, {total / 1048576:.1f} MB")
+        times = {"3.1": [], "3.2": []}
+        for rnd in range(a.rounds + 1):                      # in turn, the order swapped every round
+            if rnd == 0:
+                print("Warm-up (not counted):")
+            for way in (("3.1", "3.2") if rnd % 2 == 0 else ("3.2", "3.1")):
+                dest = base / f"{way}-{rnd}"
+                took = run(way, src, dest)
+                if rnd:
+                    times[way].append(took)
+                shutil.rmtree(dest, ignore_errors=True)
+                time.sleep(1)                                # let the disk settle a little
+        best = {way: statistics.median(ts) for way, ts in times.items()}
+        ratio = best["3.1"] / best["3.2"]
+        print(f"RESULT: 3.1 {total / best['3.1'] / 1048576:.1f} MB/s, 3.2 {total / best['3.2'] / 1048576:.1f} MB/s, "
+              f"{ratio:.2f}× (needed {a.min_ratio:.2f}×)")
+        return 0 if ratio >= a.min_ratio else 1
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

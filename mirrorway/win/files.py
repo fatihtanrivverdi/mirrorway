@@ -50,6 +50,7 @@ class FileClient:
         sock = socket.create_connection((host, port), timeout=10)
         try:
             tune_socket(sock)
+            FX.tune_file_socket(sock)
             ch, _hello, mode = open_channel(self.control.creds, sock, ROLE_FILE,
                                             {"name": socket.gethostname(), "version": __version__})
         except Exception:
@@ -92,7 +93,7 @@ class FileClient:
         summary = FX.describe(info.get("names") or [], int(info.get("count") or 0), int(info.get("total") or 0))
         try:
             ch = box["ch"] = self._connect()
-            ch.send_json(FX.MSG_FILE_REQ, {"op": "get", "id": info.get("id")})
+            ch.send_json(FX.MSG_FILE_REQ, {"op": "get", "id": info.get("id"), "pack": True})
             if int(info.get("total") or 0) >= NOTIFY_START_BYTES:
                 self.notify(T("Receiving files from the Mac"), summary)
             dest = FX.new_staging(self.base_dir)
@@ -101,7 +102,7 @@ class FileClient:
                 nonlocal prog
                 prog = self.progress = FX.Progress("in", summary, m["total"])
                 return prog
-            roots, _man = FX.recv_files(ch, dest, windows=True, max_total=self.max_total,
+            roots, man = FX.recv_files(ch, dest, windows=True, max_total=self.max_total,
                                         progress_factory=factory, cancel=cancel)
             ch.send_json(FX.MSG_FILE_RESULT, {"ok": True, "count": len(roots)})
             clip = self.control.clip
@@ -109,8 +110,8 @@ class FileClient:
                 clip.apply_remote({RC.FILES: FX.paths_to_bytes(roots)})
             if prog is not None:
                 prog.finish("done")
-            log.info("Files arrived from the Mac: %s, %.1f MB/s — ready to paste in Explorer", summary,
-                     (prog.speed() if prog else 0) / 1048576)
+            log.info("Files arrived from the Mac: %s, %.1f MB/s — ready to paste in Explorer (%s)", summary,
+                     (prog.speed() if prog else 0) / 1048576, man["stats"].text())
             self.notify(T("Files from the Mac are ready"), T("{summary}. Paste them in Explorer with Ctrl+V.").format(summary=summary))
         except Exception as exc:
             if prog is not None:
@@ -163,13 +164,15 @@ class FileClient:
                 raise FX.TransferError(res.get("error") or "the Mac did not accept it")
             if man.total >= NOTIFY_START_BYTES:
                 self.notify(T("Sending files to the Mac"), man.summary())
-            FX.send_files(ch, man, prog, cancel)
+            packed = FX.FEATURE_PACK in (self.control.server_features() or [])
+            stats = FX.send_files(ch, man, prog, cancel, packed=packed)
             mtype, payload = ch.recv()
             res = json.loads(payload.decode("utf-8")) if mtype == FX.MSG_FILE_RESULT else {}
             if not res.get("ok"):
                 raise FX.TransferError(res.get("error") or T("the Mac could not receive the files"))
             prog.finish("done")
-            log.info("Files sent to the Mac: %s, %.1f MB/s", man.summary(), prog.speed() / 1048576)
+            log.info("Files sent to the Mac: %s, %.1f MB/s (%s)", man.summary(), prog.speed() / 1048576,
+                     stats.text())
         except Exception as exc:
             prog.finish("cancelled" if cancel.is_set() else "failed", str(exc))
             if not cancel.is_set():

@@ -1355,7 +1355,7 @@ class MirrorwayServer:
             ch.send_json(MSG_HELLO, {
                 "name": machine_name(), "version": __version__, "protocol": PROTOCOL_VERSION,
                 "side": self.cfg.get("side"), "screen_share": bool(self.cfg.get("screen_share")),
-                "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, AU.FEATURE,
+                "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, FX.FEATURE_PACK, AU.FEATURE,
                              ACTIONS_FEATURE],
                 "id": self.identity.fingerprint if self.identity else "",
             })
@@ -1595,6 +1595,7 @@ class MirrorwayServer:
         prog = None
         try:
             ch.sock.settimeout(60)
+            FX.tune_file_socket(ch.sock)
             mtype, payload = ch.recv()
             req = json.loads(payload.decode("utf-8")) if mtype == FX.MSG_FILE_REQ else {}
             op = req.get("op")
@@ -1604,13 +1605,14 @@ class MirrorwayServer:
                     ch.send_json(FX.MSG_FILE_RESULT, {"ok": False, "error": T("this copy is no longer current")})
                     return
                 prog = self._file_progress("out", man.summary(), man.total)
-                FX.send_files(ch, man, prog)
+                stats = FX.send_files(ch, man, prog, packed=bool(req.get("pack")))
                 mtype, payload = ch.recv()
                 res = json.loads(payload.decode("utf-8")) if mtype == FX.MSG_FILE_RESULT else {}
                 if not res.get("ok"):
                     raise FX.TransferError(res.get("error") or T("Windows could not receive the files"))
                 prog.finish("done")
-                log.info("Files sent to Windows: %s, %.1f MB/s", man.summary(), prog.speed() / 1048576)
+                log.info("Files sent to Windows: %s, %.1f MB/s (%s)", man.summary(), prog.speed() / 1048576,
+                         stats.text())
             elif op == "put":
                 if not self.files_enabled():
                     ch.send_json(FX.MSG_FILE_RESULT, {"ok": False, "error": T("file copy and paste is turned off on the Mac")})
@@ -1638,8 +1640,8 @@ class MirrorwayServer:
                 if prog is not None:
                     prog.finish("done")
                 summ = FX.describe(info["roots"], len(info["roots"]), info["total"])
-                log.info("Files arrived from Windows: %s, %.1f MB/s — ready to paste in Finder", summ,
-                         (prog.speed() if prog else 0) / 1048576)
+                log.info("Files arrived from Windows: %s, %.1f MB/s — ready to paste in Finder (%s)", summ,
+                         (prog.speed() if prog else 0) / 1048576, info["stats"].text())
                 self.file_event = {"title": T("Files arrived from Windows"),
                                    "msg": T("{summary}. Paste them in Finder with ⌘V.").format(summary=summ)}
             else:
