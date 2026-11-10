@@ -50,7 +50,6 @@ class FileClient:
         sock = socket.create_connection((host, port), timeout=10)
         try:
             tune_socket(sock)
-            FX.tune_file_socket(sock)
             ch, _hello, mode = open_channel(self.control.creds, sock, ROLE_FILE,
                                             {"name": socket.gethostname(), "version": __version__})
         except Exception:
@@ -59,7 +58,7 @@ class FileClient:
         if mode != "key":
             ch.close()
             raise FX.TransferError(T("file transfer needs a device key"))
-        ch.sock.settimeout(60)
+        FX.prepare_file_channel(ch)
         return ch
 
     def _start(self, direction: str, target, *args) -> None:

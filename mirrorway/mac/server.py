@@ -1594,8 +1594,7 @@ class MirrorwayServer:
         """The file channel Windows opens: "get" (download what was copied on the Mac) or "put" (send from Windows)."""
         prog = None
         try:
-            ch.sock.settimeout(60)
-            FX.tune_file_socket(ch.sock)
+            FX.prepare_file_channel(ch)
             mtype, payload = ch.recv()
             req = json.loads(payload.decode("utf-8")) if mtype == FX.MSG_FILE_REQ else {}
             op = req.get("op")

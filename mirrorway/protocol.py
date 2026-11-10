@@ -126,6 +126,20 @@ def recv_exact(sock: socket.socket, n: int) -> bytes:
     return bytes(buf)
 
 
+def recv_exact_waitall(sock: socket.socket, n: int) -> bytearray:
+    """recv_exact for a blocking socket: the system waits for all n bytes (MSG_WAITALL), so a large frame takes one
+    call (and one return to Python) instead of one per few KB that arrived."""
+    buf = bytearray(n)
+    view = memoryview(buf)
+    got = 0
+    while got < n:
+        k = sock.recv_into(view[got:], n - got, socket.MSG_WAITALL)
+        if not k:
+            raise ConnectionError("Connection closed")
+        got += k
+    return buf
+
+
 def tune_socket(sock: socket.socket) -> None:
     try:
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -149,6 +163,7 @@ class SecureChannel:
         self._send_lock = threading.Lock()
         self._recv_lock = threading.Lock()
         self.closed = False
+        self.waitall = False            # blocking socket: read whole frames with MSG_WAITALL (file channel)
 
     @staticmethod
     def _nonce(counter: int) -> bytes:
@@ -167,12 +182,13 @@ class SecureChannel:
 
     def recv(self):
         with self._recv_lock:
-            (length,) = _LEN.unpack(recv_exact(self.sock, 4))
+            read = recv_exact_waitall if self.waitall else recv_exact
+            (length,) = _LEN.unpack(read(self.sock, 4))
             if length == 0:
                 raise AuthError("The other side rejected authentication")
             if length > MAX_FRAME:
                 raise ProtocolError("Frame too large")
-            ct = recv_exact(self.sock, length)
+            ct = read(self.sock, length)
             try:
                 pt = self._recv_aead.decrypt(self._nonce(self._recv_ctr), ct, None)
             except InvalidTag:

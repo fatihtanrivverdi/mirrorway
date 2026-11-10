@@ -535,3 +535,61 @@ def test_manifest_order_matches_a_folder_walk(tmp_path):
     assert [i["path"] for i in man.items] == want
     sizes = {i["path"]: i["size"] for i in man.items if not i["dir"]}
     assert sizes["w/big.bin"] == FX.CHUNK * 3 + 17
+
+
+def test_file_channel_socket_reads_whole_frames_and_times_out():
+    """prepare_file_channel: a blocking socket with the system's timeouts; frames are read whole (MSG_WAITALL)."""
+    import socket
+    from mirrorway.protocol import SecureChannel
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    a = socket.create_connection(srv.getsockname())
+    b, _ = srv.accept()
+    srv.close()
+    k1, k2 = os.urandom(32), os.urandom(32)
+    tx = SecureChannel(a, send_key=k1, recv_key=k2, role=b"F")
+    rx = SecureChannel(b, send_key=k2, recv_key=k1, role=b"F")
+    FX.prepare_file_channel(rx, timeout=0.5)
+    FX.prepare_file_channel(tx, timeout=0.5)
+    try:
+        if hasattr(socket, "MSG_WAITALL"):
+            assert rx.waitall and rx.sock.gettimeout() is None
+        big = os.urandom(3 * 1024 * 1024 + 5)
+
+        def slowly():                                          # a frame arriving in many small pieces
+            from mirrorway.protocol import _LEN
+            ct = tx._send_aead.encrypt(tx._nonce(tx._send_ctr), bytes((FX.MSG_FILE_DATA,)) + big, None)
+            tx._send_ctr += 1
+            data = _LEN.pack(len(ct)) + ct
+            for i in range(0, len(data), 200000):
+                a.sendall(data[i:i + 200000])
+                time.sleep(0.01)
+        t = threading.Thread(target=slowly)
+        t.start()
+        assert rx.recv() == (FX.MSG_FILE_DATA, big)
+        t.join()
+        tx.send(FX.MSG_FILE_END, b"x")
+        assert rx.recv() == (FX.MSG_FILE_END, b"x")
+        start = time.monotonic()
+        with pytest.raises(OSError):                           # nothing comes: the system's timeout ends the wait
+            rx.recv()
+        assert time.monotonic() - start < 5
+    finally:
+        tx.close()
+        rx.close()
+    # closing the channel from another thread ends a waiting read
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    a = socket.create_connection(srv.getsockname())
+    b, _ = srv.accept()
+    srv.close()
+    rx = SecureChannel(b, send_key=k2, recv_key=k1, role=b"F")
+    FX.prepare_file_channel(rx, timeout=30)
+    threading.Timer(0.3, rx.close).start()
+    start = time.monotonic()
+    with pytest.raises((OSError, ConnectionError)):
+        rx.recv()
+    assert time.monotonic() - start < 10
+    a.close()

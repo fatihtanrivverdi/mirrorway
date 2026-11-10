@@ -283,6 +283,29 @@ def tune_file_socket(sock) -> None:
             pass
 
 
+def prepare_file_channel(ch, timeout: float = 60.0) -> None:
+    """The file channel's socket: larger buffers, blocking with the system's own timeouts, whole frames per read.
+    With a Python timeout (settimeout) every few KB that arrive is a separate wait and read, each taking the GIL
+    back; while the writer threads were busy that halved the speed of a folder over Wi-Fi (20 vs 44 MB/s)."""
+    sock = ch.sock
+    tune_file_socket(sock)
+    if not hasattr(socket, "MSG_WAITALL"):
+        sock.settimeout(timeout)
+        return
+    try:
+        if os.name == "nt":
+            val = int(timeout * 1000)                                  # DWORD milliseconds
+        else:
+            val = struct.pack("@ll", int(timeout), int(timeout % 1 * 1e6))   # struct timeval
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO, val)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDTIMEO, val)
+    except (OSError, AttributeError, struct.error):
+        sock.settimeout(timeout)
+        return
+    sock.settimeout(None)
+    ch.waitall = True
+
+
 def _open_read(path):
     return open(path, "rb")
 
