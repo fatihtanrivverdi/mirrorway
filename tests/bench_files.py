@@ -104,7 +104,7 @@ def old_recv(ch, dest: Path):
     ch.recv()
 
 
-def run(way: str, src: Path, dest: Path) -> float:
+def run(way: str, src: Path, dest: Path, readers: int = FX.READERS, writers: int = FX.WRITERS) -> float:
     man = FX.build_manifest([str(src)])
     tx, rx = channel_pair()
     err = []
@@ -114,7 +114,7 @@ def run(way: str, src: Path, dest: Path) -> float:
             if way == "3.1":
                 old_send(tx, man)
             else:
-                FX.send_files(tx, man, packed=True)
+                FX.send_files(tx, man, packed=True, readers=readers)
         except Exception as exc:                             # noqa: BLE001
             err.append(exc)
     t0 = time.monotonic()
@@ -124,7 +124,7 @@ def run(way: str, src: Path, dest: Path) -> float:
         old_recv(rx, dest)
         stats = ""
     else:
-        _roots, info = FX.recv_files(rx, dest, windows=os.name == "nt")
+        _roots, info = FX.recv_files(rx, dest, windows=os.name == "nt", writers=writers)
         stats = info["stats"].text()
     th.join()
     took = time.monotonic() - t0
@@ -132,6 +132,8 @@ def run(way: str, src: Path, dest: Path) -> float:
     rx.close()
     if err:
         raise err[0]
+    if (readers, writers) != (FX.READERS, FX.WRITERS):
+        way += f" ({readers} readers, {writers} writers)"
     print(f"  {way}: {took:.2f} s, {man.total / took / 1048576:.1f} MB/s {stats}", flush=True)
     return took
 
@@ -141,6 +143,7 @@ def main() -> int:
     ap.add_argument("--files", type=int, default=5000)
     ap.add_argument("--min-ratio", type=float, default=1.0)
     ap.add_argument("--rounds", type=int, default=4)
+    ap.add_argument("--sweep", action="store_true", help="also try other numbers of reader and writer threads")
     ap.add_argument("--dir", help="where to make the test folder (default: a temporary folder)")
     a = ap.parse_args()
     base = Path(tempfile.mkdtemp(prefix="mirrorway-bench-", dir=a.dir))
@@ -159,6 +162,16 @@ def main() -> int:
                     times[way].append(took)
                 shutil.rmtree(dest, ignore_errors=True)
                 time.sleep(1)                                # let the disk settle a little
+        if a.sweep:
+            print("Threads:")
+            for readers, writers in ((4, 4), (8, 6), (8, 12), (16, 12), (16, 24)):
+                ts = []
+                for k in range(3):
+                    dest = base / f"sweep-{readers}-{writers}-{k}"
+                    ts.append(run("3.2", src, dest, readers, writers))
+                    shutil.rmtree(dest, ignore_errors=True)
+                    time.sleep(1)
+                print(f"  {readers} readers, {writers} writers: median {total / statistics.median(ts) / 1048576:.1f} MB/s")
         best = {way: statistics.median(ts) for way, ts in times.items()}
         ratio = best["3.1"] / best["3.2"]
         print(f"RESULT: 3.1 {total / best['3.1'] / 1048576:.1f} MB/s, 3.2 {total / best['3.2'] / 1048576:.1f} MB/s, "

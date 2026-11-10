@@ -164,6 +164,7 @@ Files and folders copied in Finder with ⌘C can be pasted in Explorer with Ctrl
 
 - The moment you copy, the content travels in the background over a separate encrypted connection. When it is complete it is put on the other side's clipboard and a notification appears; paste after that. The **File transfer** line in the Mac menu shows the progress.
 - Folders go with their subfolders. Symbolic links are skipped. Characters Windows does not allow in names (`<>:"|?*`) become `_`.
+- Folders with thousands of small files (a project, an app folder) are read and written by several threads at once and small files travel packed together, so they go nearly as fast as one large file. The log line of every transfer shows its speed and where the time went (disk or network).
 - Incoming files are first written to a hidden "incoming" folder (`~/.mirrorway/incoming` on the Mac) and copied from there when you paste; the last three transfers are kept, older ones are deleted.
 - The limits are 4 GB and 100,000 items (the size limit is the `file_clipboard_max_mb` setting on the Mac). A notification tells you when a copy could not be sent. Copying something new while a transfer is running abandons the old transfer.
 - Turn it off with **Mirrorway › File Copy and Paste**; while it is off only the names of copied files go across, as text.
