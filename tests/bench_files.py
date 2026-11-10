@@ -5,8 +5,9 @@ The folder looks like a real one (a Python app folder: 3,641 files, half under 4
 ones). After a warm-up, both ways run in turn (--rounds, the order swapped every round) and the median time of each
 counts. The 3.2 way has to be at least --min-ratio times as fast, otherwise the exit code is 1.
 
---link N also receives the folder over an N MB/s link (the sender in its own process), with the socket set up the
-3.2.0 way (Python timeout) and the current way (blocking, whole frames).
+--link N also receives the folder over an N MB/s link (the sender in its own process) and sends it into one (the
+receiver in its own process), with the socket set up the 3.2.0 way (Python timeout) and the current way (blocking,
+whole frames); the current way has to reach 85% of the link both ways.
 
 Run: python tests/bench_files.py [--files 5000] [--min-ratio 1.5] [--link 40] [--dir DIR]
 """
@@ -292,6 +293,7 @@ def main() -> int:
                     shutil.rmtree(dest, ignore_errors=True)
                     time.sleep(1)
                 print(f"  {readers} readers, {writers} writers: median {total / statistics.median(ts) / 1048576:.1f} MB/s")
+        link_ok = True
         if a.link:
             print(f"Over a {a.link:.0f} MB/s link (the sender in its own process):")
             speeds = {"3.2.0": [], "3.2.1": []}
@@ -305,12 +307,14 @@ def main() -> int:
                     time.sleep(1)
             print(f"LINK receiving: 3.2.0 socket {max(speeds['3.2.0']):.1f} MB/s, current {max(speeds['3.2.1']):.1f} "
                   f"MB/s; sending: 3.2.0 socket {max(sends['3.2.0']):.1f} MB/s, current {max(sends['3.2.1']):.1f} MB/s "
-                  f"(link {a.link:.0f} MB/s)")
+                  f"(link {a.link:.0f} MB/s, needed {0.85 * a.link:.0f} MB/s both ways)")
+            if min(max(speeds["3.2.1"]), max(sends["3.2.1"])) < 0.85 * a.link:
+                link_ok = False
         best = {way: statistics.median(ts) for way, ts in times.items()}
         ratio = best["3.1"] / best["3.2"]
         print(f"RESULT: 3.1 {total / best['3.1'] / 1048576:.1f} MB/s, 3.2 {total / best['3.2'] / 1048576:.1f} MB/s, "
               f"{ratio:.2f}× (needed {a.min_ratio:.2f}×)")
-        return 0 if ratio >= a.min_ratio else 1
+        return 0 if ratio >= a.min_ratio and link_ok else 1
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

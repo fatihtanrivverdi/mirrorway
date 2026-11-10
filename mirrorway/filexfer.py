@@ -257,6 +257,7 @@ class Stats:
         self.packed = packed
         self.files = self.dirs = self.bytes = self.frames = 0
         self.disk = self.net = 0.0
+        self.folders = 0.0                 # receiver: creating the folders (part of disk)
         self.started = time.monotonic()
         self.elapsed = 0.0
 
@@ -268,8 +269,9 @@ class Stats:
         return self.bytes / self.elapsed if self.elapsed > 0 else 0.0
 
     def text(self) -> str:
+        folders = f" (creating folders {self.folders:.1f} s)" if self.folders >= 0.05 else ""
         return (f"{self.files} files, {self.dirs} folders in {self.elapsed:.1f} s, {self.frames} frames"
-                f"{' (packed)' if self.packed else ''}; waiting for the disk {self.disk:.1f} s, "
+                f"{' (packed)' if self.packed else ''}; waiting for the disk {self.disk:.1f} s{folders}, "
                 f"for the network {self.net:.1f} s")
 
 
@@ -611,7 +613,8 @@ def recv_files(ch, dest: Path, windows: bool, max_total: int = MAX_TOTAL_DEFAULT
             if d not in made:
                 d.mkdir(parents=True, exist_ok=True)
                 made.add(d)
-        st.disk += time.monotonic() - t
+        st.folders = time.monotonic() - t
+        st.disk += st.folders
         idx = -1
         next_file()
         while idx < len(files):

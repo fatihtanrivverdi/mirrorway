@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.1 — file transfers: whole blocks per read
+- The first real measurement with 3.2.0, Mac → Windows: a folder of 20,929 files went at 20 MB/s while one large
+  file went at 44 MB/s. The file connection read every few KB that arrived separately (each time coming back to
+  Python while the writer threads were busy); now it waits for a whole 1 MB block in one system call, on both
+  sides, with the system's own 60-second timeout.
+- CI now also copies the 5,000-file folder over a simulated 40 MB/s link, both receiving and sending; it has to
+  reach 85% of the link. On the Windows runner receiving went from 34–36 to 38–42 MB/s.
+- The log line of a received transfer shows how long creating the folders took.
+
 ## 3.2.0 — folders of many small files copy much faster
 - **Copying a folder with thousands of small files** (a project, an app folder) no longer waits for each file in
   turn: the sending side reads files ahead on several threads, the receiving side writes them on several threads,

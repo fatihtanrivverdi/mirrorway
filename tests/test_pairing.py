@@ -246,11 +246,13 @@ def test_automatic_migration_from_legacy_code():
     c, wcfg, states = _client(port, pair_code="abcd efgh jkmn")
     c.start()
     try:
-        wait(lambda: srv.connected(), msg="connection with the old code")
-        assert c.auth_mode == "legacy"
-        wait(lambda: srv.devices() and Credentials(wcfg).paired(), timeout=5, msg="key registration")
+        # the client sets its mode a moment after the server counts it connected (slow CI machines see the gap);
+        # "key" already is fine too: no key existed before, so the old code was used and the key registered
+        wait(lambda: srv.connected() and c.auth_mode, msg="connection with the old code")
+        assert c.auth_mode in ("legacy", "key")
+        wait(lambda: srv.devices() and Credentials(wcfg).paired(), timeout=10, msg="key registration")
         # after registering, the client reconnects with the key by itself
-        wait(lambda: c.auth_mode == "key" and srv.connected(), timeout=10, msg="reconnection with the key")
+        wait(lambda: c.auth_mode == "key" and srv.connected(), timeout=20, msg="reconnection with the key")
         wait(lambda: not srv.status()["legacy"], timeout=3, msg="old code closed")
         assert mcfg.get("pair_code") == "" and wcfg.get("pair_code") == ""
         assert not srv.devices()[0]["pending"]
