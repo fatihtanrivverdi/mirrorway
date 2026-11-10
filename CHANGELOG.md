@@ -6,7 +6,8 @@
   Python while the writer threads were busy); now it waits for a whole 1 MB block in one system call, on both
   sides, with the system's own 60-second timeout.
 - CI now also copies the 5,000-file folder over a simulated 40 MB/s link, both receiving and sending; it has to
-  reach 85% of the link. On the Windows runner receiving went from 34–36 to 38–42 MB/s.
+  reach 85% of the link. On the Windows runner receiving went from 34–41 to 38–42 MB/s (the runners vary; the
+  real 20 MB/s case could not be reproduced there, the next real copy will show whether this was it).
 - The log line of a received transfer shows how long creating the folders took.
 
 ## 3.2.0 — folders of many small files copy much faster
