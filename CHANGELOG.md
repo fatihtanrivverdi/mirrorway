@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.2.0 — folders of many small files copy much faster
+- **Copying a folder with thousands of small files** (a project, an app folder) no longer waits for each file in
+  turn: the sending side reads files ahead on several threads, the receiving side writes them on several threads,
+  and small files travel packed together (about 1 MB per packet). Opening a file costs more than its content,
+  above all on Windows where Defender scans it; now those waits overlap.
+- Measured on CI with a 5,000-file folder through the encrypted connection: Mac 60 → 125 MB/s, Windows 24 →
+  40 MB/s (on the same machine; between two computers the network is the limit).
+- Every transfer's log line now shows where the time went, for example `5002 files, 418 folders in 3.4 s,
+  180 frames (packed); waiting for the disk 2.6 s, for the network 0.7 s`.
+- Both sides need 3.2 for the packed transfer; with an older version on the other side files still go the old
+  way.
+- The folder listing before a transfer is faster on Windows, and the file connection uses larger network buffers.
+
 ## 3.1.6 — drag-and-drop disk image for the Mac
 - **`Mirrorway-3.1.6-mac.dmg` (Apple silicon):** drag Mirrorway into Applications and open it. The app brings its
   own Python with the pinned packages, so nothing has to be installed; the first start needs **Open Anyway** once
