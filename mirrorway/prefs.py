@@ -187,15 +187,40 @@ def _screen(cfg, st, ctx) -> Page:
     ])
 
 
+def audio_app_modes():
+    return [("all", T("All apps")), ("selected", T("Only the apps below"))]
+
+
+def selected_audio_apps(cfg) -> dict:
+    apps = cfg.get("audio_apps") or {}
+    return {str(k): str(v) for k, v in apps.items()} if isinstance(apps, dict) else {}
+
+
 def _audio(cfg, st, ctx) -> Page:
-    return Page("audio", T("Audio"), "speaker.wave.2", "#D9485F", [
+    mode = cfg.get("audio_apps_mode") if cfg.get("audio_apps_mode") in ("all", "selected") else "all"
+    groups = [
         Group("", [
             Item("switch", "audio", T("Play the Mac's sound on Windows"), bool(cfg.get("audio"))),
             Item("switch", "audio_mute_mac", T("Mute the Mac's speakers meanwhile"),
                  bool(cfg.get("audio_mute_mac", True))),
             Item("text", "audio_state", ctx.get("audio_text") or T("Status: —")),
         ]),
-    ])
+        Group(T("Apps"), [Item("segmented", "audio_apps_mode", T("Send the sound of"), mode, audio_app_modes())],
+              T("Only the chosen apps' sound goes to Windows. With 'Mute the Mac's speakers' on, the other apps are "
+                "silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both).")
+              if mode == "selected" else ""),
+    ]
+    if mode == "selected":
+        chosen = selected_audio_apps(cfg)
+        apps = dict(ctx.get("audio_apps") or [])                 # running apps: {bundle id: name}
+        for bid, name in chosen.items():
+            apps.setdefault(bid, name)
+        rows = [Item("switch", "audio_app:" + bid, name, bid in chosen,
+                     detail="" if bid in dict(ctx.get("audio_apps") or []) else T("not running"))
+                for bid, name in sorted(apps.items(), key=lambda kv: kv[1].lower())]
+        groups.append(Group(T("Apps that play on Windows"), rows or [
+            Item("text", "no_audio_apps", T("No apps are open"))]))
+    return Page("audio", T("Audio"), "speaker.wave.2", "#D9485F", groups)
 
 
 def _clipboard(cfg, st, ctx) -> Page:

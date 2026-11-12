@@ -749,6 +749,16 @@ class VideoSession(threading.Thread):
                 time.sleep(interval - dt)
 
 
+def _per_minute(stats: dict, prev: dict, key: str):
+    """Windows reports running totals; the log shows how many happened in the last minute ("?" if not reported)."""
+    total = stats.get(key)
+    if not isinstance(total, (int, float)):
+        return "?"
+    last = prev.get(key, 0)
+    prev[key] = total
+    return int(total - last) if total >= last else int(total)       # lower: Windows started counting again
+
+
 class AudioSession(threading.Thread):
     """The audio channel Windows opens: captures the sound playing on the Mac and sends it as 16-bit PCM."""
 
@@ -761,6 +771,8 @@ class AudioSession(threading.Thread):
         self.client_stats: dict = {}
         self._q: "queue.Queue" = queue.Queue(maxsize=self.QUEUE_MAX)
         self.dropped = 0
+        self.cap = None
+        self._refreshing = False
 
     def close(self) -> None:
         self.closed = True
@@ -771,6 +783,30 @@ class AudioSession(threading.Thread):
             self._q.put_nowait((pcm, rate, channels))
         except queue.Full:
             self.dropped += 1
+
+    REFRESH_S = 5.0            # with chosen apps: how often to look for chosen apps that started or quit
+
+    def _refresh_apps(self, force: bool = False) -> None:
+        """With chosen apps, the capture follows apps that start or quit (on its own thread: it waits for
+        ScreenCaptureKit)."""
+        cap = self.cap
+        if cap is None or not hasattr(cap, "refresh") or self._refreshing:
+            return
+        if not force and getattr(cap, "apps", None) is None:
+            return
+        self._refreshing = True
+
+        def run():
+            try:
+                if force:
+                    cap.set_apps(self.server.audio_apps())
+                else:
+                    cap.refresh()
+            except Exception as exc:
+                log.info("Could not update the apps whose sound is captured: %s", exc)
+            finally:
+                self._refreshing = False
+        threading.Thread(target=run, daemon=True, name="mirrorway-audio-apps").start()
 
     def _reader(self) -> None:
         try:
@@ -792,7 +828,11 @@ class AudioSession(threading.Thread):
                 return
             try:
                 cap = srv.audio_capture_factory()
+                apps = srv.audio_apps()
+                if apps is not None and hasattr(cap, "set_apps"):
+                    cap.apps = list(apps)                   # only the chosen apps' sound
                 cap.start(self._on_pcm)
+                self.cap = cap
             except Exception as exc:
                 srv.audio_error = str(exc).splitlines()[0]
                 log.warning("Cannot capture the Mac's sound: %s", exc)
@@ -803,9 +843,15 @@ class AudioSession(threading.Thread):
             log.info("The Mac's sound is playing on Windows (%s)", getattr(cap, "name", "?"))
             threading.Thread(target=self._reader, daemon=True, name="mirrorway-audio-stats").start()
             fmt, seq = None, 0
-            m = {"t": time.monotonic(), "packets": 0, "bytes": 0, "lv_sum": 0.0, "lv_n": 0, "peak": -120.0}
+            m = {"t": time.monotonic(), "packets": 0, "bytes": 0}
+            meter = AU.LevelMeter()
+            prev = {"dropped": self.dropped, "underruns": 0, "trims": 0}    # totals at the start of the minute
             last_send = time.monotonic()
+            last_refresh = time.monotonic()
             while not self.closed:
+                if time.monotonic() - last_refresh >= self.REFRESH_S:
+                    last_refresh = time.monotonic()
+                    self._refresh_apps()
                 try:
                     pcm, rate, ch = self._q.get(timeout=0.5)
                 except queue.Empty:
@@ -823,26 +869,23 @@ class AudioSession(threading.Thread):
                     seq += 1
                     m["packets"] += 1
                     m["bytes"] += len(pcm)
-                    if m["packets"] % 5 == 0:                 # level: every 5th packet (CPU)
-                        lv = AU.level_dbfs(pcm)
-                        m["lv_sum"] += lv
-                        m["lv_n"] += 1
-                        m["peak"] = max(m["peak"], lv)
+                    meter.add(pcm)
                 now = time.monotonic()
                 if now - m["t"] >= 60.0:
                     span = now - m["t"]
                     cs = self.client_stats
-                    if m["packets"] or self.dropped:
-                        log.info("Audio (last 1 min): %d packets, %.0f kbit/s, level avg %s (peak %s)%s; "
-                                 "Windows queue %s ms, underruns %s, trimmed %s",
-                                 m["packets"], m["bytes"] * 8 / 1000.0 / span,
-                                 AU.describe_level(m["lv_sum"] / m["lv_n"] if m["lv_n"] else None),
-                                 AU.describe_level(m["peak"] if m["lv_n"] else None),
-                                 f", dropped on the Mac {self.dropped}" if self.dropped else "",
-                                 cs.get("queue_ms", "?"), cs.get("underruns", "?"), cs.get("trims", "?"))
+                    dropped = self.dropped - prev["dropped"]
+                    if m["packets"] or dropped:
+                        log.info("Audio (last 1 min): %d packets, %.0f kbit/s, %s%s; Windows queue %s ms, "
+                                 "underruns %s, trimmed %s", m["packets"], m["bytes"] * 8 / 1000.0 / span,
+                                 meter.describe(), f", dropped on the Mac {dropped}" if dropped else "",
+                                 cs.get("queue_ms", "?"), _per_minute(cs, prev, "underruns"),
+                                 _per_minute(cs, prev, "trims"))
                     else:
                         log.info("Audio (last 1 min): no audio samples from the Mac (silent)")
-                    m = {"t": now, "packets": 0, "bytes": 0, "lv_sum": 0.0, "lv_n": 0, "peak": -120.0}
+                    prev["dropped"] = self.dropped
+                    m = {"t": now, "packets": 0, "bytes": 0}
+                    meter.reset()
         except Exception as exc:
             if not self.closed:
                 log.info("Audio connection closed: %s", exc)
@@ -1688,6 +1731,19 @@ class MirrorwayServer:
             self.volume.set(False)
             self.cfg.set("audio_muted_by_app", False)
             log.info("The Mac's sound was unmuted")
+
+    def audio_apps(self) -> Optional[list]:
+        """Whose sound goes to Windows: None = every app, else the chosen apps' bundle ids."""
+        if self.cfg.get("audio_apps_mode") != "selected":
+            return None
+        apps = self.cfg.get("audio_apps") or {}
+        return sorted(apps) if isinstance(apps, dict) else []
+
+    def audio_apps_changed(self) -> None:
+        """The choice of apps changed in Settings: the running capture switches at once."""
+        a = self.audio
+        if a is not None and not a.closed:
+            a._refresh_apps(force=True)
 
     def audio_mute_changed(self) -> None:
         """The "mute the Mac" menu item changed: apply it at once if audio is streaming."""

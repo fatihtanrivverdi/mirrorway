@@ -933,4 +933,20 @@ TR = {
         'İki bilgisayarı birlikte kilitle',
     'When the Mac locks, Windows locks too, and the other way round; unlock each as usual':
         'Mac kilitlenince Windows da kilitlenir, tersi de; kilitleri her zamanki gibi ayrı ayrı açılır',
+    'All apps':
+        'Tüm uygulamalar',
+    'Only the apps below':
+        'Yalnızca aşağıdakiler',
+    'Apps':
+        'Uygulamalar',
+    'Send the sound of':
+        'Sesi gönderilenler',
+    "Only the chosen apps' sound goes to Windows. With 'Mute the Mac's speakers' on, the other apps are silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both).":
+        "Yalnızca seçilen uygulamaların sesi Windows'a gider. 'Bu sırada Mac'in hoparlörünü kapat' açıkken diğer uygulamalar Mac'te de duyulmaz; onları Mac'te duymak için bu ayarı kapatın (seçilenler o zaman iki bilgisayarda da çalar).",
+    'Apps that play on Windows':
+        "Windows'ta çalan uygulamalar",
+    'not running':
+        'açık değil',
+    'No apps are open':
+        'Açık uygulama yok',
 }

@@ -49,6 +49,8 @@ MAC_DEFAULTS = {
     "audio": False,             # play the Mac's sound on Windows
     "audio_mute_mac": True,     # mute the Mac's speakers while its sound plays on Windows (restored afterwards)
     "audio_muted_by_app": False,
+    "audio_apps_mode": "all",   # whose sound goes to Windows: "all" apps, or only the "selected" ones
+    "audio_apps": {},           # the selected apps: {bundle id: name}
     "extend_monitor": None,     # second screen: None = off, [x, y, w, h] = the Windows monitor that extends the Mac
     "win_monitors": [],         # monitors Windows reported last (for the menu while Windows is not connected)
     "extend_last": None,        # the monitor chosen last ([x, y, w, h]); the panel's tile turns it back on

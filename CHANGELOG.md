@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.2.4 — the pointer keeps its place; audio from chosen apps
+- **Fix: the pointer landed somewhere else after every switch.** With several Windows monitors side by side, the
+  way back measured the position along one monitor while the way in measured it along all of them, so going down
+  to Windows and straight back moved the Mac's pointer (300 → 600 pt, 1500 → 1200 pt on a 1800 pt wide Mac). Now
+  the way out is the exact inverse of the way in, whatever the monitors: back through the same edge, the pointer is
+  where it left.
+- With the shortcut (⌃⌥ arrows) or the panel's button, Windows' pointer stays where it is and the Mac's comes back
+  to where it was (before, both jumped to the middle of the screen).
+- **Audio from chosen apps:** Settings › Audio › "Send the sound of" › "Only the apps below", then switch on the
+  apps whose sound should play on Windows. The choice applies at once; apps that start later are picked up within
+  a few seconds.
+- **The audio level in the log is right:** the minute line gave "level avg silent" even while music played (the
+  silent packets between songs pulled the average of dB values down). It now shows the level while sound played,
+  how much of the minute had sound and the loudest moment; dropouts and trims are counted per minute, not since
+  the start.
+
 ## 3.2.3 — lock both computers together
 - **New setting on the Mac, Settings › General › "Lock both computers together"** (off by default): when the Mac
   locks (lid closed, ⌃⌘Q, screen saver, idle), Windows locks too, like Windows + L; when Windows locks, the Mac

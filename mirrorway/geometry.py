@@ -62,11 +62,37 @@ def union(rects: Sequence[Rect]) -> Rect:
 
 
 def edge_ratio(rect: Rect, px: float, py: float, side: str) -> float:
+    """The fraction along one display's edge (the inverse of entry_point on that display: pixel 0 -> 0, the last
+    pixel -> 1)."""
     if side in ("left", "right"):
-        v = (py - rect.top) / max(rect.h, 1)
+        v = (py - rect.top) / max(rect.h - 1, 1)
     else:
-        v = (px - rect.left) / max(rect.w, 1)
+        v = (px - rect.left) / max(rect.w - 1, 1)
     return min(max(v, 0.0), 1.0)
+
+
+def edge_group(rects: Sequence[Rect], side: str) -> Tuple[Rect, List[Rect]]:
+    """The union of the displays and the displays that form its outer edge on `side`."""
+    u = union(rects)
+    if side == "left":
+        cands = [r for r in rects if r.left == u.left]
+    elif side == "right":
+        cands = [r for r in rects if r.right == u.right]
+    elif side == "top":
+        cands = [r for r in rects if r.top == u.top]
+    else:
+        cands = [r for r in rects if r.bottom == u.bottom]
+    return u, cands or list(rects)
+
+
+def outer_ratio(rects: Sequence[Rect], r: Rect, px: float, py: float, side: str) -> float:
+    """The fraction along the outer edge on `side` where the pointer (on display r) leaves: the exact inverse of
+    entry_point, so leaving and coming back through the same edge lands on the same spot. One display on that edge:
+    along that display; several (monitors side by side): along all of them together."""
+    u, cands = edge_group(rects, side)
+    if len(cands) == 1 and cands[0] == r:
+        return edge_ratio(r, px, py, side)
+    return edge_ratio(u, px, py, side)
 
 
 def edge_exit(rects: Sequence[Rect], px: float, py: float, dx: float, dy: float, side: str,
@@ -105,7 +131,7 @@ def edge_exit(rects: Sequence[Rect], px: float, py: float, dx: float, dy: float,
         t, span = px - r.left, r.w
     if corner_guard and (t < corner_guard or t > span - corner_guard):
         return None
-    return edge_ratio(r, px, py, side)
+    return outer_ratio(rects, r, px, py, side)
 
 
 def entry_point(rects: Sequence[Rect], side: str, ratio: float, inset: float = 3) -> Tuple[float, float]:
@@ -117,22 +143,16 @@ def entry_point(rects: Sequence[Rect], side: str, ratio: float, inset: float = 3
     if side == "center":
         r = rects[0]
         return (r.left + r.w / 2, r.top + r.h / 2)
-    u = union(rects)
+    u, cands = edge_group(rects, side)
     if side in ("left", "right"):
         target_y = u.top + ratio * (u.h - 1)
-        edge_x = u.left if side == "left" else u.right
         # among the displays touching this edge, pick the one closest to the target y
-        cands = [r for r in rects if (r.left == edge_x if side == "left" else r.right == edge_x)]
-        cands = cands or list(rects)
         r = min(cands, key=lambda c: 0 if c.top <= target_y < c.bottom
                 else min(abs(target_y - c.top), abs(target_y - c.bottom)))
         y = r.top + ratio * (r.h - 1) if len(cands) == 1 else min(max(target_y, r.top), r.bottom - 1)
         x = r.left + inset if side == "left" else r.right - 1 - inset
         return (x, y)
     target_x = u.left + ratio * (u.w - 1)
-    edge_y = u.top if side == "top" else u.bottom
-    cands = [r for r in rects if (r.top == edge_y if side == "top" else r.bottom == edge_y)]
-    cands = cands or list(rects)
     r = min(cands, key=lambda c: 0 if c.left <= target_x < c.right
             else min(abs(target_x - c.left), abs(target_x - c.right)))
     x = r.left + ratio * (r.w - 1) if len(cands) == 1 else min(max(target_x, r.left), r.right - 1)

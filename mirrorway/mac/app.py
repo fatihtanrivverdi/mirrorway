@@ -50,6 +50,21 @@ def _main_thread(fn, *args) -> None:
     AppHelper.callAfter(fn, *args)
 
 
+def running_apps() -> list:
+    """The open apps (those with a Dock icon), as [(bundle id, name)], without Mirrorway itself."""
+    try:
+        from AppKit import NSWorkspace
+        out = {}
+        for app in NSWorkspace.sharedWorkspace().runningApplications():
+            bid = app.bundleIdentifier()
+            if app.activationPolicy() != 0 or not bid or str(bid).startswith("app.mirrorway"):
+                continue
+            out[str(bid)] = str(app.localizedName() or bid)
+        return sorted(out.items(), key=lambda kv: kv[1].lower())
+    except Exception:
+        return []
+
+
 def _reveal(path) -> None:
     """Show the file selected in Finder."""
     subprocess.Popen(["/usr/bin/open", "-R", str(path)])
@@ -974,6 +989,7 @@ class MirrorwayMacApp(rumps.App):
             "extend_choices": self.server.extend.choices(),
             "extend_text": self._extend_state_text(st),
             "audio_text": self._audio_text(st.get("audio"), bool(st.get("connected"))),
+            "audio_apps": running_apps() if self.cfg.get("audio_apps_mode") == "selected" else [],
             "files_text": self._files_text(st.get("files")),
             "login": {"available": bool(self.bundle), "enabled": bool(self.bundle) and loginitem.is_enabled()},
             "update": {"text": u.text, "busy": u.busy, "available": info.version if info else None,
@@ -1077,6 +1093,19 @@ class MirrorwayMacApp(rumps.App):
             elif key == "audio_mute_mac":
                 cfg.set(key, bool(value))
                 self._bg(self.server.audio_mute_changed, "mirrorway-audio-mute")
+            elif key == "audio_apps_mode":
+                cfg.set(key, "selected" if value == "selected" else "all")
+                self.server.audio_apps_changed()
+                self.refresh_settings()                        # the app list appears or goes
+            elif key.startswith("audio_app:"):
+                bid = key.split(":", 1)[1]
+                apps = prefs.selected_audio_apps(cfg)
+                if value:
+                    apps[bid] = dict(running_apps()).get(bid, bid)
+                else:
+                    apps.pop(bid, None)
+                cfg.set("audio_apps", apps)
+                self.server.audio_apps_changed()
             elif key == "network_lock":
                 cfg.set(key, bool(value))
                 self.server.apply_network(self.server.netlock.refresh())

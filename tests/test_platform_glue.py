@@ -374,6 +374,15 @@ def test_mac_app_settings_window_changes():
         a.apply_setting('switch_ring', False)
         a._show_ring(300.0, 400.0)
         assert shown == [(100.0, 200.0)] and cfg.get('switch_ring') is False
+        # only the chosen apps' sound (3.2.4)
+        changed = []
+        a.server.audio_apps_changed = lambda: changed.append(a.server.audio_apps())
+        a.apply_setting('audio_apps_mode', 'selected')
+        a.apply_setting('audio_app:com.spotify.client', True)
+        assert cfg.get('audio_apps') == {'com.spotify.client': 'com.spotify.client'}   # no AppKit here: id as name
+        a.apply_setting('audio_app:com.spotify.client', False)
+        a.apply_setting('audio_apps_mode', 'all')
+        assert changed == [[], ['com.spotify.client'], [], None] and cfg.get('audio_apps') == {}
         dev = a.server.add_device('Office-PC', b'k' * 32, 'windows')
         a.apply_setting('action:remove_device:' + dev['id'], None)
         assert a.server.devices() == [] and 'Remove the pairing' in R.alerts[-1][1]

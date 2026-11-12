@@ -82,7 +82,7 @@ def test_edge_enters_remote_and_forwards_motion():
     m, p = sink.msgs[-1]
     assert m == P.MSG_ENTER
     info = json.loads(p)
-    assert info["from"] == "left" and info["exit"] == "left" and abs(info["ratio"] - 0.25) < 1e-6
+    assert info["from"] == "left" and info["exit"] == "left" and abs(info["ratio"] - 225 / 899) < 1e-6
     assert plat.warps[-1] == (720.0, 450.0)          # parking point (centre of the main display)
     # movement comes from the position change (the delta field is ignored)
     assert r.handle(InputEvent("move", x=723, y=449, dx=99, dy=99)) == PASS_AS_MOVE
@@ -288,3 +288,36 @@ def test_frozen_location_falls_back_to_delta_fields():
     assert sink.msgs == []
     r.handle(InputEvent("move", x=720, y=450, dx=3, dy=1))
     assert sink.msgs == [(P.MSG_MOVE, P.pack_move(3.0, 1.0))]
+
+
+def test_shortcut_switches_keep_the_pointer_where_it_was():
+    """⌃⌥ arrows / the panel: the Mac's pointer comes back where it was, Windows' pointer stays where it was."""
+    r, plat, sink, clock = make_router()
+    plat.warps.append((300.0, 200.0))                      # the pointer on the Mac
+    assert r.enter_center() and r.remote
+    assert plat.warps[-1] == (720.0, 450.0)                # parked while on Windows
+    clock.t += 1
+    assert r.leave_to_mac()
+    assert plat.warps[-1] == (300.0, 200.0)
+    # it left through the edge: a shortcut back puts it a little inside the edge, not on it
+    clock.t += 1
+    r.handle(InputEvent("move", x=1439, y=600, dx=4))
+    assert r.remote
+    clock.t += 1
+    r.leave_to_mac()
+    assert plat.warps[-1] == (1439 - 4, 600.0)
+    # the display is gone (an external monitor unplugged): the middle of the main display
+    r.enter_center()
+    r._home = (5000.0, 100.0)
+    r.leave_to_mac()
+    assert plat.warps[-1] == (720.0, 450.0)
+
+    w, clock = FakeWin(), FakeClock()
+    rc = RemoteControl(w, lambda m, o: None, clock=clock)
+    w.pos = [1500, 300]
+    rc.on_enter({"from": "center", "ratio": 0.5})
+    assert w.pos == [1500, 300] and rc.active               # stays
+    rc.on_exit()
+    w.pos = [-50, 300]                                      # not on a monitor: the middle
+    rc.on_enter({"from": "center", "ratio": 0.5})
+    assert w.pos == [960, 540]

@@ -120,35 +120,94 @@ def sample_buffer_pcm(sbuf, detail: Optional[dict] = None) -> Optional[tuple]:
     return pcm, rate, A.CHANNELS                   # to_s16 always returns stereo
 
 
+def chosen_apps(running, wanted) -> list:
+    """The running apps (SCRunningApplication) whose bundle id was chosen, in the order ScreenCaptureKit lists them."""
+    wanted = set(wanted or ())
+    out = []
+    for app in running or ():
+        try:
+            if str(app.bundleIdentifier() or "") in wanted:
+                out.append(app)
+        except Exception:
+            continue
+    return out
+
+
+def _shareable_content(wait: float = 8.0):
+    import ScreenCaptureKit as SCK
+    box, done = {}, threading.Event()
+
+    def on_content(content, error):
+        box["content"], box["error"] = content, error
+        done.set()
+    SCK.SCShareableContent.getShareableContentWithCompletionHandler_(on_content)
+    if not done.wait(wait):
+        raise RuntimeError(T("ScreenCaptureKit did not respond"))
+    content = box.get("content")
+    if box.get("error") is not None or content is None or not content.displays():
+        raise RuntimeError(T("no Screen Recording permission, or the content could not be read: {error}").format(error=box.get('error')))
+    return content
+
+
 class SCKAudioCapture:
-    """start(on_pcm) -> on_pcm(pcm, rate, channels) is called on ScreenCaptureKit's own queue."""
+    """start(on_pcm) -> on_pcm(pcm, rate, channels) is called on ScreenCaptureKit's own queue.
+    apps: None = the sound of every app; a list of bundle ids = only those apps (3.2.4). The filter follows apps
+    that start or quit (refresh()) and a changed choice (set_apps()) without restarting the stream."""
 
     name = "ScreenCaptureKit"
 
-    def __init__(self):
+    def __init__(self, apps: Optional[list] = None):
         self.stream = None
         self.output = None
         self.on_pcm: Optional[Callable] = None
         self.errors = 0
         self.buffers = 0
         self.format = None
+        self.apps = list(apps) if apps is not None else None
+        self.capturing: Optional[frozenset] = None          # the chosen apps the filter holds now (None: every app)
+
+    def _filter(self, content):
+        import ScreenCaptureKit as SCK
+        display = content.displays()[0]
+        if self.apps is None:
+            self.capturing = None
+            return SCK.SCContentFilter.alloc().initWithDisplay_excludingWindows_(display, [])
+        apps = chosen_apps(content.applications(), self.apps)
+        self.capturing = frozenset(str(a.bundleIdentifier()) for a in apps)
+        return SCK.SCContentFilter.alloc().initWithDisplay_includingApplications_exceptingWindows_(display, apps, [])
+
+    def set_apps(self, apps: Optional[list]) -> None:
+        """A new choice of apps (None: all): applied to the running stream."""
+        self.apps = list(apps) if apps is not None else None
+        self.refresh(force=True)
+
+    def refresh(self, force: bool = False) -> bool:
+        """With chosen apps: when one of them started or quit, update the stream's filter. True if updated."""
+        s = self.stream
+        if s is None or (self.apps is None and not force):
+            return False
+        content = _shareable_content()
+        if not force and self.apps is not None:
+            now = frozenset(str(a.bundleIdentifier()) for a in chosen_apps(content.applications(), self.apps))
+            if now == self.capturing:
+                return False
+        flt = self._filter(content)
+        done = threading.Event()
+        s.updateContentFilter_completionHandler_(flt, lambda error: done.set())
+        done.wait(5)
+        log.info("Audio from %s", "every app" if self.capturing is None else
+                 (", ".join(sorted(self.capturing)) or "none of the chosen apps (none is running)"))
+        return True
 
     def start(self, on_pcm: Callable[[bytes, int, int], None]) -> None:
         import CoreMedia
         import ScreenCaptureKit as SCK
         self.on_pcm = on_pcm
-        box, done = {}, threading.Event()
-
-        def on_content(content, error):
-            box["content"], box["error"] = content, error
-            done.set()
-        SCK.SCShareableContent.getShareableContentWithCompletionHandler_(on_content)
-        if not done.wait(8):
-            raise RuntimeError(T("ScreenCaptureKit did not respond"))
-        content = box.get("content")
-        if box.get("error") is not None or content is None or not content.displays():
-            raise RuntimeError(T("no Screen Recording permission, or the content could not be read: {error}").format(error=box.get('error')))
-        flt = SCK.SCContentFilter.alloc().initWithDisplay_excludingWindows_(content.displays()[0], [])
+        content = _shareable_content()
+        flt = self._filter(content)
+        if self.capturing is not None:
+            log.info("Audio only from the chosen apps: %s",
+                     ", ".join(sorted(self.capturing)) or "none is running yet")
         cfg = SCK.SCStreamConfiguration.alloc().init()
         cfg.setCapturesAudio_(True)
         cfg.setSampleRate_(A.RATE)

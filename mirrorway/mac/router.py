@@ -17,7 +17,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 from .. import gestures as G
 from .. import quick
 from ..extend import vd_point
-from ..geometry import OPPOSITE, EdgeGuard, entry_point
+from ..geometry import OPPOSITE, EdgeGuard, containing, entry_point
 from ..keymap import (FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, MAC_CAPS, MAC_FN, MAC_LOPT,
                       MAC_ROPT, KeyTranslator, modifier_is_down)
 from ..protocol import (MSG_BUTTON, MSG_ENTER, MSG_GESTURE, MSG_EXIT, MSG_KEY, MSG_MOVE, MSG_RELEASE_ALL,
@@ -104,6 +104,7 @@ class Router:
         self.clock = clock
         self.lock = threading.RLock()
         self.remote = False
+        self._home: Optional[Tuple[float, float]] = None  # the pointer's place on the Mac before going to Windows
         self.remote_down: Dict[int, Tuple[int, int, int]] = {}
         self.mac_down: Set[int] = set()
         self.swallowed: Set[int] = set()
@@ -546,6 +547,7 @@ class Router:
                 pos = self.platform.cursor_pos()
             except Exception:
                 pos = self.park
+        self._home = (float(pos[0]), float(pos[1]))      # where the Mac's pointer was: a shortcut brings it back here
         try:
             self.platform.hide_cursor()
             self._park_cursor(*pos)
@@ -598,8 +600,10 @@ class Router:
             # even if the virtual display covers that edge (physically the Mac is there)
             pos = entry_point([self.platform.main_display()], self.side, ratio, inset=4)
         elif ratio is None or not displays:
-            main = self.platform.main_display()
-            pos = (main.x + main.w / 2.0, main.y + main.h / 2.0)
+            pos = self._home_point(displays)             # shortcut, panel, lock, disconnect: where it was
+            if pos is None:
+                main = self.platform.main_display()
+                pos = (main.x + main.w / 2.0, main.y + main.h / 2.0)
         else:
             pos = entry_point(displays, self.side, ratio, inset=4)
         try:
@@ -614,6 +618,19 @@ class Router:
                 self.on_return(float(pos[0]), float(pos[1]))
             except Exception:
                 log.exception("switch ring")
+
+    def _home_point(self, displays) -> Optional[Tuple[float, float]]:
+        """The pointer's place before control went to Windows, a little inside its display (so it does not sit on the
+        edge it may have left through); None if that display is gone."""
+        home = self._home
+        if home is None or not displays:
+            return None
+        r = containing(displays, *home)
+        if r is None:
+            return None
+        inset = 4
+        return (min(max(home[0], r.left + inset), r.right - 1 - inset),
+                min(max(home[1], r.top + inset), r.bottom - 1 - inset))
 
     # ---- called from outside ----------------------------------------------
     def enter_center(self) -> bool:

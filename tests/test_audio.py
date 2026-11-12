@@ -233,6 +233,17 @@ class FakeCapture:
         self.fail = fail
         self.stop_ev = threading.Event()
         self.started = False
+        self.apps = None
+        self.set_calls = []
+        self.refreshes = 0
+
+    def set_apps(self, apps):
+        self.apps = apps
+        self.set_calls.append(apps)
+
+    def refresh(self, force=False):
+        self.refreshes += 1
+        return False
 
     def start(self, on_pcm):
         if self.fail:
@@ -308,6 +319,14 @@ def test_end_to_end_audio_on_off_and_mute(tmp_path):
         srv.audio_mute_changed()
         assert vol.muted is True
 
+        # only the chosen apps (3.2.4): applied to the running capture at once
+        assert srv.audio_apps() is None and caps[-1].apps is None
+        srv.cfg.set("audio_apps_mode", "selected")
+        srv.cfg.set("audio_apps", {"com.spotify.client": "Spotify", "com.google.Chrome": "Chrome"})
+        srv.audio_apps_changed()
+        wait(lambda: caps[-1].set_calls == [["com.google.Chrome", "com.spotify.client"]], timeout=5,
+             msg="chosen apps applied")
+
         srv.cfg.set("audio", False)                                      # audio transfer turned off
         srv.send_audio_state()
         wait(lambda: srv.audio is None and caps[-1].stop_ev.is_set(), timeout=10, msg="audio stopped")
@@ -321,6 +340,7 @@ def test_end_to_end_audio_on_off_and_mute(tmp_path):
         wait(lambda: "Recording permission" in srv.status()["audio"]["error"] and "Recording permission" in c.audio.last_error,
              timeout=10, msg="error reported")
         assert vol.muted is False
+        assert caps[-1].apps == ["com.google.Chrome", "com.spotify.client"]     # a new capture starts with them
     finally:
         c.stop()
         srv.stop()
@@ -348,3 +368,59 @@ def test_asbd_is_read_in_every_shape_pyobjc_gives():
     assert MA.asbd_info((0.0, 0, 0, 0, 0, 0, 0, 0, 0)) is None           # an empty format: falls back to the default
     rate, ch, flags, bits = MA.SCK_DEFAULT
     assert (rate, ch, bits) == (48000, 2, 32) and flags & MA.FLAG_FLOAT and flags & MA.FLAG_NON_INTERLEAVED
+
+
+def test_level_meter_reports_music_between_silence():
+    """3.2.4: a minute with 20 s of music and 40 s of silent packets is "level … while playing (33% …)", not
+    "silent" (the old dB average was pulled down by the silent packets)."""
+    m = A.LevelMeter()
+    assert m.describe() == "no audio"
+    silence = b"\0" * 3840
+    for _ in range(100):
+        m.add(silence)
+    assert m.describe() == "silent" and m.level() is None
+    music = _sine(amp=0.5)
+    for _ in range(50):
+        m.add(music)
+    text = m.describe()
+    assert text.startswith("level -9 dBFS while playing (33% of the time)") and text.endswith("peak -6 dBFS"), text
+    m.reset()
+    assert m.packets == 0 and m.describe() == "no audio"
+
+
+def test_audio_counts_per_minute():
+    from mirrorway.mac.server import _per_minute
+    prev = {"underruns": 0}
+    assert _per_minute({"underruns": 84}, prev, "underruns") == 84
+    assert _per_minute({"underruns": 90}, prev, "underruns") == 6
+    assert _per_minute({"underruns": 2}, prev, "underruns") == 2      # Windows started again
+    assert _per_minute({}, prev, "trims") == "?"
+
+
+def test_chosen_apps_and_settings_page():
+    from conftest import DictCfg as Cfg
+    from mirrorway import prefs as P
+    from mirrorway.mac.audio import chosen_apps
+
+    class App:
+        def __init__(self, bid):
+            self.bid = bid
+
+        def bundleIdentifier(self):
+            return self.bid
+    running = [App("com.apple.Safari"), App("com.spotify.client"), App(None)]
+    assert [a.bid for a in chosen_apps(running, ["com.spotify.client", "com.other"])] == ["com.spotify.client"]
+    assert chosen_apps(running, []) == [] and chosen_apps(None, ["x"]) == []
+
+    page = {p.id: p for p in P.mac_pages(Cfg(audio=True), {})}["audio"]
+    assert page.item("audio_apps_mode").value == "all" and len(page.groups) == 2       # no app list
+    cfg = Cfg(audio=True, audio_apps_mode="selected", audio_apps={"com.spotify.client": "Spotify",
+                                                                   "com.old.app": "Old App"})
+    page = {p.id: p for p in P.mac_pages(cfg, {}, {"audio_apps": [("com.apple.Safari", "Safari"),
+                                                                    ("com.spotify.client", "Spotify")]})}["audio"]
+    rows = page.groups[2].items
+    assert [r.title for r in rows] == ["Old App", "Safari", "Spotify"]
+    assert [r.value for r in rows] == [True, False, True] and rows[0].detail == "not running"
+    assert "Only the chosen apps" in page.groups[1].note
+    empty = {p.id: p for p in P.mac_pages(Cfg(audio_apps_mode="selected"), {})}["audio"]
+    assert empty.groups[2].items[0].key == "no_audio_apps"

@@ -102,6 +102,7 @@ Change the letters or turn a shortcut off in **Settings › General › Quick sh
 - **Shortcut:** `⌃ Control + ⌥ Option + →` switches to Windows, `⌃ + ⌥ + ←` returns to the Mac. The arrows follow the side you chose.
 - **Lock both computers together** (Settings › General on the Mac, off by default): when the Mac locks, Windows locks too, and the other way round; unlock each as usual. Whenever one of them locks, the keyboard and mouse come back to the Mac.
 - After every switch a violet ring grows and fades for half a second where the pointer appears, on Windows and on the Mac, so you see at once which computer has it. Turn it off in Settings › General (on each computer separately).
+- Going out through an edge and coming back through it puts the pointer back where it left, also with several Windows monitors side by side. With the shortcut or the panel's button, each pointer stays where it was: Windows' pointer does not move, and the Mac's comes back to its place.
 - The edge does not switch near the corners, so the Mac's Hot Corners keep working.
 - Right after switching, returning is briefly blocked: it is allowed again once the pointer moves away from the edge or after 0.8 seconds; to return, press gently against the edge. This stops the pointer from bouncing between the screens while your finger is still sliding on the trackpad.
 
@@ -178,7 +179,8 @@ With **Mirrorway › Audio › Play the Mac's Sound on Windows**, everything tha
 - The sound is captured the same way as the screen (ScreenCaptureKit); no extra permission is needed beyond **Screen Recording**. macOS 13 or later is required.
 - It travels uncompressed as 48 kHz stereo (≈1.5 Mbit/s), which a home network handles easily. The delay is ≈60–100 ms. If the network stalls and sound piles up, the oldest is dropped so the sound never lags behind.
 - **Mute the Mac's Speakers Meanwhile** (on by default): while the sound plays on Windows, the Mac's own output is muted, and unmuted when the transfer ends (when the connection drops or you turn it off). Even if Mirrorway crashes, it is unmuted on the next start. A Mac that was already muted is left alone.
-- The **Status** line shows whether the transfer is working, or why not. The Mac log gets one line a minute: packets, sound level, Windows's queue and dropouts.
+- **Only some apps:** in Settings › Audio, **Send the sound of › Only the apps below** and switch on the apps (for example Spotify or a browser); the others are not sent. Apps that start later are picked up within a few seconds. With **Mute the Mac's speakers** on, the other apps are silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both computers).
+- The **Status** line shows whether the transfer is working, or why not. The Mac log gets one line a minute: packets, the level while sound played and how much of the minute had sound, the loudest moment, Windows's queue, and the dropouts and trims of that minute.
 
 ### A Windows monitor as the Mac's second screen (experimental)
 

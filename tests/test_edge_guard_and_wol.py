@@ -30,7 +30,7 @@ def test_edge_guard_disarmed_after_switch_until_time_or_distance():
     assert g.check(SCREEN, 0, 500, -1, 0, "left", corner_guard=0) is None      # 1 px < PUSH_PX
     assert g.check(SCREEN, 0, 500, -1, 0, "left", corner_guard=0) is None
     r = g.check(SCREEN, 0, 500, -1, 0, "left", corner_guard=0)
-    assert r is not None and abs(r - 500 / 1080) < 1e-6
+    assert r is not None and abs(r - 500 / 1079) < 1e-6
 
 
 def test_edge_guard_arms_by_distance_and_resets_push():

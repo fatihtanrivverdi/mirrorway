@@ -61,6 +61,14 @@ class RemoteControl:
         rest = [r for r in rects if r != m]
         return rest or rects
 
+    def _pointer_on(self, rects: List[Rect]) -> Optional[Tuple[float, float]]:
+        """Where Windows' pointer is now, if it is on one of these monitors."""
+        try:
+            x, y = self.backend.get_pos()
+        except Exception:
+            return None
+        return (x, y) if any(r.contains(x, y) for r in rects) else None
+
     def _exit_sides(self, rects: List[Rect]) -> List[str]:
         sides = [self.exit_side]
         m = self.extend_rect
@@ -100,8 +108,11 @@ class RemoteControl:
             exit_side = info.get("exit") or (from_side if from_side != "center" else "left")
             self.exit_side = exit_side
             pos = info.get("pos")
+            here = self._pointer_on(rects) if from_side == "center" else None
             if isinstance(pos, list) and len(pos) == 2:
                 x, y = clamp_to_rects(rects, float(pos[0]), float(pos[1]))
+            elif here is not None:
+                x, y = here                  # a shortcut or the panel: the pointer stays where it was on Windows
             else:
                 x, y = entry_point(rects, from_side, ratio)
             self.backend.move_to(x, y)

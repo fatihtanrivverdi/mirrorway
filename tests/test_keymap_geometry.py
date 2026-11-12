@@ -1,4 +1,4 @@
-from mirrorway.geometry import Rect, edge_exit, entry_point
+from mirrorway.geometry import Rect, containing, edge_exit, entry_point
 from mirrorway.keymap import (FLAG_SHIFT, KeyTranslator, modifier_is_down, _BASE)
 from mirrorway.protocol import KEYFLAG_EXTENDED, KEYFLAG_VK
 
@@ -53,7 +53,7 @@ MAC = [Rect(0, 0, 1440, 900)]
 
 
 def test_edge_exit_right():
-    assert edge_exit(MAC, 1439, 450, 3, 0, "right") == 0.5
+    assert edge_exit(MAC, 1439, 450, 3, 0, "right") == 450 / 899        # the last pixel row is 1.0
     assert edge_exit(MAC, 1200, 450, 3, 0, "right") is None
     assert edge_exit(MAC, 1439, 450, -3, 0, "right") is None
     assert edge_exit(MAC, 1439, 2, 3, 0, "right") is None      # corner guard
@@ -81,3 +81,34 @@ def test_entry_point():
     multi = [Rect(0, 0, 1920, 1080), Rect(-1920, 200, 1920, 1080)]
     x, y = entry_point(multi, "left", 0.5)
     assert x == -1917
+
+
+def test_leaving_and_coming_back_lands_on_the_same_spot():
+    """The exit ratio is the inverse of entry_point: whatever the monitors, going out through an edge and coming
+    back in through it puts the pointer where it left (Windows below the Mac with two monitors side by side
+    used to drift: the exit was measured along one monitor, the entry along both)."""
+    from mirrorway.geometry import OPPOSITE, entry_point, outer_ratio
+    layouts = {
+        "one": [Rect(0, 0, 1920, 1080)],
+        "two side by side, second on the left": [Rect(0, 0, 1920, 1080), Rect(-1920, 0, 1920, 1080)],
+        "different sizes": [Rect(0, 0, 2560, 1440), Rect(2560, 360, 1920, 1080)],
+        "stacked": [Rect(0, 0, 1920, 1080), Rect(0, 1080, 1920, 1080)],
+    }
+    for name, rects in layouts.items():
+        for side in ("top", "bottom", "left", "right"):
+            for k in range(1, 20):
+                ratio = k / 20
+                x, y = entry_point(rects, side, ratio, inset=0)
+                r = containing(rects, x, y)
+                assert r is not None, (name, side, ratio)
+                back = outer_ratio(rects, r, x, y, side)
+                x2, y2 = entry_point(rects, side, back, inset=0)
+                assert abs(x2 - x) <= 1 and abs(y2 - y) <= 1, (name, side, ratio, (x, y), (x2, y2))
+    # Mac above Windows (the real setup): Mac bottom edge -> Windows top edge (two monitors) -> back to the Mac
+    mac = [Rect(0, 0, 1800, 1169)]
+    win = layouts["two side by side, second on the left"]
+    for mx in (100, 666, 900, 1500, 1700):
+        ratio = outer_ratio(mac, mac[0], mx, 1168, "bottom")
+        wx, wy = entry_point(win, OPPOSITE["bottom"], ratio)
+        back = outer_ratio(win, containing(win, wx, wy), wx, wy, "top")
+        assert abs(entry_point(mac, "bottom", back)[0] - mx) <= 1, mx

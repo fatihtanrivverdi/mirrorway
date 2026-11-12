@@ -274,6 +274,48 @@ def audio_capture():
             f"muted ({'yes' if muted else 'NO'}) {desc('muted')}")
 
 
+def audio_chosen_apps():
+    """Only the chosen apps' sound (3.2.4): with Finder chosen, a tone afplay plays is not captured; switched to every
+    app while the stream runs (updateContentFilter), it is. Only reported, like the capture above."""
+    import math
+    import struct
+    import subprocess
+    import time
+    import wave
+    from mirrorway import audio as A
+    from mirrorway.mac.audio import SCKAudioCapture
+    path = os.path.join(tempfile.mkdtemp(prefix="mirrorway-ci-apps-"), "tone.wav")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(48000)
+        w.writeframes(b"".join(struct.pack("<h", int(12000 * math.sin(2 * math.pi * 440 * i / 48000)))
+                               for i in range(48000 * 6)))
+    phase = {"name": "chosen"}
+    got = {"chosen": [], "all": []}
+    cap = SCKAudioCapture(apps=["com.apple.finder"])
+    cap.start(lambda pcm, rate, ch: got[phase["name"]].append(pcm))
+    chosen = sorted(cap.capturing or [])
+    player = subprocess.Popen(["/usr/bin/afplay", path])
+    try:
+        time.sleep(2.0)
+        phase["name"] = "all"
+        cap.set_apps(None)
+        time.sleep(0.3)
+        got["all"].clear()
+        time.sleep(1.5)
+    finally:
+        player.kill()
+        cap.stop()
+
+    def level(name):
+        m = A.LevelMeter()
+        for pcm in got[name]:
+            m.add(pcm)
+        return m.describe()
+    return f"Finder only {chosen}: {level('chosen')}; every app: {level('all')}"
+
+
 def unicodedata_nfc(s):
     import unicodedata
     return unicodedata.normalize("NFC", s)
@@ -494,6 +536,10 @@ try:
     print(f"[INFO] Audio capture (ScreenCaptureKit): {audio_capture()}")
 except Exception as exc:  # noqa: BLE001  (CI may have no Screen Recording permission; tried on a real Mac)
     print(f"[WARN] Could not try audio capture: {type(exc).__name__}: {str(exc).splitlines()[0][:160]}")
+try:
+    print(f"[INFO] Audio from chosen apps (ScreenCaptureKit filter): {audio_chosen_apps()}")
+except Exception as exc:  # noqa: BLE001
+    print(f"[WARN] Could not try audio from chosen apps: {type(exc).__name__}: {str(exc).splitlines()[0][:160]}")
 try:
     import subprocess
     from mirrorway.mac.notify import OSASCRIPT, script

@@ -120,6 +120,55 @@ class QueuePolicy:
         return queued / self.bpm if self.bpm else 0.0
 
 
+SOUND_DBFS = -60.0          # a packet louder than this counts as sound (below it: silence or noise)
+
+
+class LevelMeter:
+    """The level of the sound sent in a period, for the log. Averaging dB values packet by packet (as before 3.2.4)
+    let the silent packets ScreenCaptureKit sends between songs pull the average to "silent" even while music
+    played; here the level is the energy average of the packets with sound, with the share of time that had sound
+    and the loudest sample."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self.packets = 0
+        self.sound = 0
+        self.energy = 0.0           # sum of squared samples (full scale = 1) over the packets with sound
+        self.samples = 0
+        self.peak = 0.0             # the loudest sample (full scale = 1)
+
+    def add(self, pcm: bytes) -> None:
+        import numpy as np
+        a = np.frombuffer(pcm, dtype="<i2", count=len(pcm) // 2).astype(np.float32) / 32768.0
+        if not len(a):
+            return
+        self.packets += 1
+        sq = float(np.dot(a, a))
+        self.peak = max(self.peak, float(np.max(np.abs(a))))
+        if sq / len(a) > 10 ** (SOUND_DBFS / 10):
+            self.sound += 1
+            self.energy += sq
+            self.samples += len(a)
+
+    def level(self) -> Optional[float]:
+        """dBFS while sound played; None if there was no sound."""
+        if not self.samples or self.energy <= 0:
+            return None
+        return 10 * math.log10(self.energy / self.samples)
+
+    def describe(self) -> str:
+        if not self.packets:
+            return "no audio"
+        lvl = self.level()
+        if lvl is None:
+            return "silent"
+        peak = 20 * math.log10(self.peak) if self.peak > 0 else -120.0
+        return (f"level {lvl:.0f} dBFS while playing ({100.0 * self.sound / self.packets:.0f}% of the time), "
+                f"peak {peak:.0f} dBFS")
+
+
 def describe_level(db: Optional[float]) -> str:
     if db is None:
         return "?"
