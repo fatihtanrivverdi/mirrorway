@@ -129,8 +129,13 @@ class WinApp:
                                      on_view=lambda req: self._post(self._view_requested, req),
                                      files_dir=CONFIG_DIR,
                                      audio_player_factory=_audio_player_factory(),
-                                     on_notify=lambda title, msg: self._post(self._show_notification, title, msg))
+                                     on_notify=lambda title, msg: self._post(self._show_notification, title, msg),
+                                     lock_fn=winapi.lock_workstation if sys.platform == "win32" else None)
         self.control.enable_log_forwarding()
+        self.session = None
+        if sys.platform == "win32":                      # Windows locked or unlocked: tell the Mac
+            from .session import SessionWatcher
+            self.session = SessionWatcher(self.control.report_lock)
 
     # ---- UI queue (from other threads to Tk) -----------------------
     def _post(self, fn, *args) -> None:
@@ -566,6 +571,8 @@ class WinApp:
             self._start_hotkeys()
         if self.ring is not None:
             self.ring.start()                            # the window and the frames are ready before the first switch
+        if self.session is not None:
+            self.session.start()
         self.root.after(50, self._drain)
         if not (self.creds.paired() or self.creds.legacy_code()):
             self.root.after(300, self.open_settings)

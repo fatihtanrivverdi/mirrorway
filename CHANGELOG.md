@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.3 — lock both computers together
+- **New setting on the Mac, Settings › General › "Lock both computers together"** (off by default): when the Mac
+  locks (lid closed, ⌃⌘Q, screen saver, idle), Windows locks too, like Windows + L; when Windows locks, the Mac
+  locks too. Unlock each computer as usual. A lock the other side reports right after it was asked for is not sent
+  back.
+- Whenever Windows or the Mac locks, the keyboard and mouse come back to the Mac (Windows' lock screen does not
+  take Mirrorway's input yet), also with the setting off.
+- Windows follows its lock with WTSRegisterSessionNotification; the Mac with the system's lock notifications and
+  locks with the system's own lock function. Both computers need 3.2.3.
+
 ## 3.2.2 — a ring shows where the pointer appears
 - **After every switch** (screen edge, shortcut, the panel's button) a violet ring grows and fades for half a second
   where the pointer appears: on Windows when the Mac's pointer arrives, on the Mac when control comes back. It has

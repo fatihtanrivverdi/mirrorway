@@ -22,7 +22,7 @@ from ..devkeys import KeyUnavailable, b64d, b64e, fingerprint, load_identity
 from ..h264 import FLAG_KEY
 from ..secure import (MAGIC2, MSG_ENROLL, ROLE_PAIR, ST_TOO_MANY, PairingClosed,
                       UnknownDevice, format_code, new_pairing_code, server_accept, server_pair)
-from ..protocol import (ACTIONS_FEATURE, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
+from ..protocol import (ACTIONS_FEATURE, LOCK_FEATURE, MSG_LOCK, MSG_LOCKED, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LEAVE, MSG_LOG, MSG_MOVE, MSG_PING, MSG_STATS,
                         MSG_UPDATE, MSG_UPDATE_RESULT,
                         MSG_VIDEO_INFO, MSG_VIEW, PROTOCOL_VERSION, ROLE_AUDIO, ROLE_CONTROL, ROLE_FILE, ROLE_VIDEO, AuthError, ProtocolError,
@@ -158,6 +158,8 @@ class ControlSession:
                     self.server.enroll(self, json.loads(payload.decode("utf-8")))
                 elif mtype == MSG_ACTION:
                     self.server.action_from_windows(json.loads(payload.decode("utf-8")))
+                elif mtype == MSG_LOCKED:
+                    self.server.windows_lock_changed(json.loads(payload.decode("utf-8")))
                 elif mtype == MSG_HELLO:
                     upd = json.loads(payload.decode("utf-8"))
                     self.hello.update(upd)
@@ -933,6 +935,9 @@ class MirrorwayServer:
         self._vt_fail_count = 0
         self._vt_block_until = 0.0             # after a temporary failure, the software encoder until this time
         self.capture_nv12 = True               # capture the screen as NV12 on the hardware H.264 path
+        self.lock_mac: Optional[Callable[[], object]] = None    # locks the Mac (set by the app; "Lock both computers")
+        self._asked_windows_lock = -1e9        # when the Mac asked Windows to lock (its "locked" reply is not echoed)
+        self._locked_for_windows = -1e9        # when Windows' lock locked the Mac (the Mac's lock is not echoed)
         self.control: Optional[ControlSession] = None
         self.video: Optional[VideoSession] = None
         self.last_error: str = ""
@@ -1356,7 +1361,7 @@ class MirrorwayServer:
                 "name": machine_name(), "version": __version__, "protocol": PROTOCOL_VERSION,
                 "side": self.cfg.get("side"), "screen_share": bool(self.cfg.get("screen_share")),
                 "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, FX.FEATURE_PACK, AU.FEATURE,
-                             ACTIONS_FEATURE],
+                             ACTIONS_FEATURE, LOCK_FEATURE],
                 "id": self.identity.fingerprint if self.identity else "",
             })
         except Exception:
@@ -1714,6 +1719,60 @@ class MirrorwayServer:
                 threading.Thread(target=self.send_audio_state, daemon=True, name="mirrorway-audio-state").start()
             else:
                 self.send_audio_state()          # tell Windows the current state anyway
+
+    # ---- lock both computers together -----------------------------------------------------------------
+    LOCK_ECHO_S = 10.0          # a lock the other side reports this soon after we caused it is the same lock
+
+    def lock_sync(self) -> bool:
+        return bool(self.cfg.get("lock_sync", False))
+
+    def mac_lock_changed(self, locked: bool) -> None:
+        """The Mac's screen locked or unlocked (from the app, main thread). The keyboard and mouse come back to the
+        Mac; with "Lock both computers together" Windows is locked too."""
+        if not locked:
+            log.info("The Mac was unlocked")
+            return
+        log.info("The Mac was locked")
+        try:
+            self.router.leave_to_mac()
+        except Exception:
+            log.exception("could not take the keyboard and mouse back")
+        if not self.lock_sync() or not self.connected():
+            return
+        if time.monotonic() - self._locked_for_windows < self.LOCK_ECHO_S:
+            return                                   # Windows locked first and locked the Mac: nothing to send back
+        if not self.supports(LOCK_FEATURE):
+            log.info("Windows was not locked: its Mirrorway is older than 3.2.3")
+            return
+        self._asked_windows_lock = time.monotonic()
+        try:
+            self.send_json(MSG_LOCK, {})
+            log.info("The Mac locked: Windows is asked to lock")
+        except Exception as exc:
+            log.info("Could not ask Windows to lock: %s", exc)
+
+    def windows_lock_changed(self, info: dict) -> None:
+        """Windows reported its lock (from the control connection). Its lock screen does not take Mirrorway's input,
+        so the keyboard and mouse come back to the Mac; with the setting on, the Mac locks too."""
+        locked = bool(isinstance(info, dict) and info.get("locked"))
+        log.info("Windows was %s", "locked" if locked else "unlocked")
+        if not locked:
+            return
+        try:
+            if self.router.remote:
+                self.router.leave_to_mac()
+        except Exception:
+            log.exception("could not take the keyboard and mouse back")
+        if not self.lock_sync() or self.lock_mac is None:
+            return
+        if time.monotonic() - self._asked_windows_lock < self.LOCK_ECHO_S:
+            return                                   # the Mac asked for this lock: the Mac is already locked
+        self._locked_for_windows = time.monotonic()
+        log.info("Windows locked: locking the Mac")
+        try:
+            self.lock_mac()
+        except Exception:
+            log.exception("could not lock the Mac")
 
     def request_viewer(self, show: bool = True) -> bool:
         """Open (or close) the screen window on Windows: for the second screen and the panel's Screen tile.

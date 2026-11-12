@@ -100,6 +100,7 @@ Change the letters or turn a shortcut off in **Settings › General › Quick sh
 
 - **At the screen edge:** by default Windows is assumed to be on the **right** of the Mac. Push the pointer against the right edge of the Mac's screen to move to Windows; push it against the left edge of the Windows screen to come back. Change the side with **Mirrorway › Windows Is on This Side of the Screen**.
 - **Shortcut:** `⌃ Control + ⌥ Option + →` switches to Windows, `⌃ + ⌥ + ←` returns to the Mac. The arrows follow the side you chose.
+- **Lock both computers together** (Settings › General on the Mac, off by default): when the Mac locks, Windows locks too, and the other way round; unlock each as usual. Whenever one of them locks, the keyboard and mouse come back to the Mac.
 - After every switch a violet ring grows and fades for half a second where the pointer appears, on Windows and on the Mac, so you see at once which computer has it. Turn it off in Settings › General (on each computer separately).
 - The edge does not switch near the corners, so the Mac's Hot Corners keep working.
 - Right after switching, returning is briefly blocked: it is allowed again once the pointer moves away from the edge or after 0.8 seconds; to return, press gently against the edge. This stops the pointer from bouncing between the screens while your finger is still sliding on the trackpad.

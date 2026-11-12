@@ -55,6 +55,7 @@ MAC_DEFAULTS = {
     "quick_panel": True,        # clicking the menu bar icon opens the panel (False: the classic menu)
     "menubar_state": True,      # "•" (connected) and " Win" (controlling Windows) next to the menu bar icon
     "switch_ring": True,        # a ring where the pointer appears when control comes back, for half a second
+    "lock_sync": False,         # lock both computers together: the Mac locks -> Windows locks, and the other way
     "shortcuts": {"screen": "s", "second": "d", "audio": "a", "panel": "m"},   # Control + Option + letter
 }
 

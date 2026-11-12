@@ -102,6 +102,8 @@ def _general(cfg, ctx) -> Page:
         Item("switch", "edge_switch", T("Switch at the screen edge"), bool(cfg.get("edge_switch"))),
         Item("switch", "switch_ring", T("Show a ring where the pointer appears"), bool(cfg.get("switch_ring", True)),
              detail=T("For half a second after switching computers; set separately on Windows")),
+        Item("switch", "lock_sync", T("Lock both computers together"), bool(cfg.get("lock_sync", False)),
+             detail=T("When the Mac locks, Windows locks too, and the other way round; unlock each as usual")),
         Item("switch", "login", T("Open at login"), bool(login.get("enabled")),
              detail="" if login.get("available") else T("Only when Mirrorway runs as Mirrorway.app"),
              enabled=bool(login.get("available"))),

@@ -156,6 +156,11 @@ def move_absolute(x: float, y: float) -> None:
     send_inputs(mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, nx, ny))
 
 
+def lock_workstation() -> bool:
+    """Locks Windows, like Windows + L (the lock screen opens; the session keeps running)."""
+    return bool(user32.LockWorkStation())
+
+
 def clipboard_sequence() -> int:
     return int(user32.GetClipboardSequenceNumber())
 

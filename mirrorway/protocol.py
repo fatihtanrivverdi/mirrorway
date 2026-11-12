@@ -52,6 +52,9 @@ MSG_EXIT = 12          # s->c  (control returned to the Mac)
 MSG_VIEW = 13          # s->c JSON {"open": true|false} — open/close the screen window on Windows (second screen, panel)
 MSG_ACTION = 14        # c->s JSON {"audio": bool} — a setting changed from the Windows panel (feature "actions")
 ACTIONS_FEATURE = "actions"
+MSG_LOCK = 15          # s->c  the Mac locked: lock Windows (only with the Mac's "Lock both computers" setting)
+MSG_LOCKED = 16        # c->s JSON {"locked": bool} — Windows was locked / unlocked
+LOCK_FEATURE = "lock"  # both sides: understands MSG_LOCK / MSG_LOCKED
 MSG_MOVE = 20          # s->c <ff  dx, dy  (Windows pikseli)
 MSG_BUTTON = 21        # s->c <BB  button, pressed(1)/released(0)
 MSG_SCROLL = 22        # s->c <ii  vertical, horizontal (WHEEL_DELTA units, 120 = one notch)

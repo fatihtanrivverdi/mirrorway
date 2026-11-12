@@ -277,6 +277,23 @@ def switch_ring():
     return f"{ring.frames} frames in {ring.shown} rings, first {took:.2f} s, scale {monitor_scale(400, 300):.2f}"
 
 
+def session_watcher():
+    """Windows' lock is followed (WTSRegisterSessionNotification on a hidden window) and LockWorkStation is there;
+    the runner itself is not locked."""
+    import ctypes
+    from mirrorway.win.session import SessionWatcher
+    w = SessionWatcher(lambda locked: None)
+    w.start()
+    assert w.ready.wait(10), "the session thread did not start"
+    assert w.registered, "WTSRegisterSessionNotification failed"
+    assert ctypes.windll.user32.LockWorkStation is not None
+    t = w._thread
+    w.stop()
+    t.join(5)
+    assert not t.is_alive(), "the session thread did not stop"
+    return "registered"
+
+
 def tray_panel():
     """The tray panel (Tk) in light and dark theme; printed as PNG (base64) for a look from the CI log."""
     import base64
@@ -419,6 +436,7 @@ check("Settings window (Tk)", settings_window)
 check("Start with Windows (Startup shortcut)", startup_link)
 check("Shortcuts (RegisterHotKey)", hotkeys)
 check("Switch ring (layered window)", switch_ring)
+check("Lock follow (WTS session notification)", session_watcher)
 check("Tray panel (Tk)", tray_panel)
 check("H.264 encoding + decoding", h264)
 check("SDL2 window and YUV texture", sdl)

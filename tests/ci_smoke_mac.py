@@ -461,7 +461,24 @@ def switch_ring():
     return f"{ring.shown} rings, {f.size.width:.0f} pt"
 
 
+def lock_watch():
+    """The Mac's lock is followed (distributed notifications reach the observer) and the system's lock function is
+    there; the runner itself is not locked."""
+    from Foundation import NSDistributedNotificationCenter
+    from mirrorway.mac import lock as L
+    seen = []
+    obs = L.watch(seen.append)
+    obs.screenLocked_(None)
+    obs.screenUnlocked_(None)
+    NSDistributedNotificationCenter.defaultCenter().removeObserver_(obs)
+    assert seen == [True, False], seen
+    how = L.can_lock()
+    assert how == "login", f"SACLockScreenImmediate is missing ({how})"
+    return how
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
+check("Lock follow and lock (login framework)", lock_watch)
 check("Switch ring (AppKit, Core Animation)", switch_ring)
 check("Quick panel (AppKit)", quick_panel)
 check("Quick panel on a real status item", status_item_panel)

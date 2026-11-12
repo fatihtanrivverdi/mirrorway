@@ -1,4 +1,4 @@
 """Mirrorway — use a Mac's keyboard and trackpad on a Windows PC and see the Mac's screen on it."""
 
-__version__ = "3.2.2"
+__version__ = "3.2.3"
 APP_NAME = "Mirrorway"

@@ -929,4 +929,8 @@ TR = {
         'Bilgisayar değiştirince yarım saniye; Windows için ayrıca ayarlanır',
     "When the Mac's pointer arrives, for half a second":
         "Mac'in imleci geldiğinde yarım saniye",
+    'Lock both computers together':
+        'İki bilgisayarı birlikte kilitle',
+    'When the Mac locks, Windows locks too, and the other way round; unlock each as usual':
+        'Mac kilitlenince Windows da kilitlenir, tersi de; kilitleri her zamanki gibi ayrı ayrı açılır',
 }

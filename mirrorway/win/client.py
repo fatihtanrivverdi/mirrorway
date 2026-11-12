@@ -21,7 +21,7 @@ from .. import richclip as RC
 from ..extend import FEATURE as EXTEND_FEATURE
 from ..gestures import FEATURE as GESTURES_FEATURE
 from ..i18n import T
-from ..protocol import (ACTIONS_FEATURE, MSG_ACTION, MSG_BUTTON, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_ENTER, MSG_EXIT, MSG_GESTURE,
+from ..protocol import (ACTIONS_FEATURE, LOCK_FEATURE, MSG_LOCK, MSG_LOCKED, MSG_ACTION, MSG_BUTTON, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_ENTER, MSG_EXIT, MSG_GESTURE,
                         MSG_FRAME, MSG_FRAME2, MSG_HELLO, MSG_KEY, MSG_MOVE, MSG_PING, MSG_RELEASE_ALL,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LOG, MSG_SCROLL, MSG_STATS, MSG_TEXT,
                         MSG_UPDATE,
@@ -176,9 +176,10 @@ class ControlClient(threading.Thread):
                  apply_update_fn: Optional[Callable] = None, netinfo_fn: Optional[Callable] = None,
                  credentials: Optional[Credentials] = None, on_view: Optional[Callable[[dict], None]] = None,
                  files_dir=None, on_notify: Optional[Callable[[str, str], None]] = None,
-                 audio_player_factory: Optional[Callable] = None):
+                 audio_player_factory: Optional[Callable] = None, lock_fn: Optional[Callable[[], object]] = None):
         super().__init__(daemon=True, name="mirrorway-control")
         self.on_view = on_view                 # the Mac asked for its screen window to open (second screen)
+        self.lock_fn = lock_fn                 # locks Windows (the Mac locked, with "Lock both computers together")
         self.file_target: Optional[Tuple[str, int]] = None     # the connected Mac's address, for the file channel
         self.files = None
         if files_dir is not None:
@@ -256,6 +257,26 @@ class ControlClient(threading.Thread):
         except Exception:
             return False
 
+    def report_lock(self, locked: bool) -> bool:
+        """Windows was locked or unlocked (from the session watcher): tell the Mac, which takes the keyboard and
+        mouse back and, with its setting on, locks itself too."""
+        if LOCK_FEATURE not in self.server_features():
+            return False
+        try:
+            self.send_json(MSG_LOCKED, {"locked": bool(locked)})
+            return True
+        except Exception:
+            return False
+
+    def _lock_requested(self) -> None:
+        if self.lock_fn is None:
+            return
+        log.info("The Mac locked: locking Windows")
+        try:
+            self.lock_fn()
+        except Exception:
+            log.exception("could not lock Windows")
+
     @property
     def audio_on(self) -> bool:
         """The Mac's sound is being played here (the Mac turned the audio transfer on)."""
@@ -321,7 +342,8 @@ class ControlClient(threading.Thread):
                          "monitors": [[r.x, r.y, r.w, r.h] for r in self.monitors_fn()],
                          "auto_update": True,
                          "features": ["echo", "text", "devkeys", RC.FEATURE, EXTEND_FEATURE, GESTURES_FEATURE,
-                                      FX.FEATURE] + ([AU.FEATURE] if self.audio is not None else [])}
+                                      FX.FEATURE] + ([AU.FEATURE] if self.audio is not None else [])
+                                     + ([LOCK_FEATURE] if self.lock_fn is not None else [])}
                 ch, server_hello, mode = open_channel(self.creds, sock, ROLE_CONTROL, hello)
             except Exception as exc:
                 from ..secure import UnknownDevice, WrongServer
@@ -511,6 +533,8 @@ class ControlClient(threading.Thread):
                     self.files.on_offer(json.loads(payload.decode("utf-8")))
             elif mtype == MSG_GESTURE:
                 r.on_gesture(json.loads(payload.decode("utf-8")))
+            elif mtype == MSG_LOCK:
+                self._lock_requested()
             elif mtype == MSG_VIEW:
                 if self.on_view is not None:
                     try:
