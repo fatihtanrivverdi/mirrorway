@@ -134,6 +134,7 @@ class Router:
         # event tap thread and must return quickly
         self.action_keys: Dict[int, str] = {}
         self.on_action: Optional[Callable[[str], None]] = None
+        self.on_return: Optional[Callable[[float, float], None]] = None   # where the pointer came back (the ring)
         self.reload_settings()
 
     # ---- settings ----------------------------------------------------------
@@ -608,6 +609,11 @@ class Router:
             log.exception("could not show the pointer")
         log.info("Control returned to the Mac%s", " (to the second screen)" if vr is not None else "")
         self._notify()
+        if self.on_return is not None:
+            try:
+                self.on_return(float(pos[0]), float(pos[1]))
+            except Exception:
+                log.exception("switch ring")
 
     # ---- called from outside ----------------------------------------------
     def enter_center(self) -> bool:

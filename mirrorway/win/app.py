@@ -100,6 +100,11 @@ class WinApp:
         self.remote = RemoteControl(self.backend, lambda mt, obj: self.control.send_json(mt, obj))
         self.remote.listeners.append(lambda active: self._post(self._refresh_icon))
         self.remote.listeners.append(lambda active: self._post(self._on_remote_active, active))
+        self.ring = None
+        if sys.platform == "win32":                      # where the Mac's pointer arrives: a ring for half a second
+            from .ring import RingIndicator
+            self.ring = RingIndicator(enabled=lambda: bool(self.cfg.get("switch_ring", True)))
+            self.remote.enter_listeners.append(self.ring.show)
 
         def clip_factory(send_fn):
             try:
@@ -481,7 +486,7 @@ class WinApp:
         return prefs.win_pages(self.cfg, ctx)
 
     _BOOL_SETTINGS = ("clipboard", "file_clipboard", "open_viewer_on_start", "hw_decode", "overlay_fullscreen",
-                      "overlay_window", "overlay_extend", "quick_panel")
+                      "overlay_window", "overlay_extend", "quick_panel", "switch_ring")
 
     def apply_setting(self, key: str, value) -> None:
         """A change in the Settings window."""
@@ -559,6 +564,8 @@ class WinApp:
         self.control.start()
         if sys.platform == "win32":
             self._start_hotkeys()
+        if self.ring is not None:
+            self.ring.start()                            # the window and the frames are ready before the first switch
         self.root.after(50, self._drain)
         if not (self.creds.paired() or self.creds.legacy_code()):
             self.root.after(300, self.open_settings)

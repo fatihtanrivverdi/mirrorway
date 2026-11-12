@@ -362,6 +362,18 @@ def test_mac_app_settings_window_changes():
         assert a.title == '!'
         a.apply_setting('quick_panel', False)
         assert cfg.get('quick_panel') is False and a.mi_panel.state == 0
+        # the switch ring: the router reports where the pointer came back; the ring follows the setting
+        shown = []
+
+        class FakeRing:
+            def show(self, x, y):
+                shown.append((x, y))
+        a.ring = FakeRing()
+        assert a.server.router.on_return is not None
+        a._show_ring(100.0, 200.0)
+        a.apply_setting('switch_ring', False)
+        a._show_ring(300.0, 400.0)
+        assert shown == [(100.0, 200.0)] and cfg.get('switch_ring') is False
         dev = a.server.add_device('Office-PC', b'k' * 32, 'windows')
         a.apply_setting('action:remove_device:' + dev['id'], None)
         assert a.server.devices() == [] and 'Remove the pairing' in R.alerts[-1][1]

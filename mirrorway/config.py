@@ -54,6 +54,7 @@ MAC_DEFAULTS = {
     "extend_last": None,        # the monitor chosen last ([x, y, w, h]); the panel's tile turns it back on
     "quick_panel": True,        # clicking the menu bar icon opens the panel (False: the classic menu)
     "menubar_state": True,      # "•" (connected) and " Win" (controlling Windows) next to the menu bar icon
+    "switch_ring": True,        # a ring where the pointer appears when control comes back, for half a second
     "shortcuts": {"screen": "s", "second": "d", "audio": "a", "panel": "m"},   # Control + Option + letter
 }
 
@@ -72,6 +73,7 @@ WIN_DEFAULTS = {
     "overlay_extend": False,    # stats box on the second screen (over the Mac desktop; off by default)
     "file_clipboard": True,     # copied files go to the Mac and back (the Files tile)
     "quick_panel": True,        # clicking the tray icon opens the panel (False: the screen window, as before 3.1.2)
+    "switch_ring": True,        # a ring where the Mac's pointer arrives, for half a second
     "shortcuts": {"screen": "s"},   # Control + Alt + letter: show or hide the Mac's screen
 }
 

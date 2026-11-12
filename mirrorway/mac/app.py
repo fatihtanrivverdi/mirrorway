@@ -135,6 +135,8 @@ class MirrorwayMacApp(rumps.App):
         self._status_target = None
         self.settings_win = None
         self.server.router.on_action = self._on_shortcut
+        self.ring = None
+        self.server.router.on_return = lambda x, y: _main_thread(self._show_ring, x, y)
         self._build_menu()
 
     # ---- menu ---------------------------------------------------------------
@@ -990,6 +992,18 @@ class MirrorwayMacApp(rumps.App):
             log.exception("Could not open the Settings window; showing the menu")
             self.show_menu()
 
+    def _show_ring(self, x: float, y: float) -> None:
+        """Control came back from Windows: a ring where the pointer appeared (main thread)."""
+        if not self.cfg.get("switch_ring", True):
+            return
+        try:
+            if self.ring is None:
+                from .ring import RingWindow
+                self.ring = RingWindow()
+            self.ring.show(x, y)
+        except Exception:
+            log.exception("Could not show the switch ring")
+
     def refresh_settings(self, st=None) -> None:
         w = self.settings_win
         if w is None or not w.visible:
@@ -1000,7 +1014,7 @@ class MirrorwayMacApp(rumps.App):
             log.exception("Could not update the Settings window")
 
     _BOOL_SETTINGS = ("edge_switch", "auto_speed", "invert_scroll", "option_unicode", "gestures", "clipboard",
-                      "file_clipboard", "auto_update_check", "menubar_state")
+                      "file_clipboard", "auto_update_check", "menubar_state", "switch_ring")
 
     def apply_setting(self, key: str, value) -> None:
         """A change in the Settings window (the same effect as the menu item)."""

@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.2 — a ring shows where the pointer appears
+- **After every switch** (screen edge, shortcut, the panel's button) a violet ring grows and fades for half a second
+  where the pointer appears: on Windows when the Mac's pointer arrives, on the Mac when control comes back. It has
+  a thin white edge, so it shows on light and dark screens, and it never takes clicks or the focus.
+- Windows draws it in a layered, click-through window (smooth edges, at the monitor's scale); the Mac animates it
+  with Core Animation above every window, also full-screen apps and all Spaces.
+- Turn it off in Settings › General: "Show a ring where the pointer appears" (on each computer separately).
+- CI shows the ring on real Windows and macOS: the window's styles, the place, hiding after the animation, a new
+  switch during the animation.
+
 ## 3.2.1 — file transfers: whole blocks per read
 - The first real measurement with 3.2.0, Mac → Windows: a folder of 20,929 files went at 20 MB/s while one large
   file went at 44 MB/s. The file connection read every few KB that arrived separately (each time coming back to

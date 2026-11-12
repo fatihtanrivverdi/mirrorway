@@ -923,4 +923,10 @@ TR = {
         'parmak izi {id}',
     'Mirrorway is running from the disk image or the Downloads folder. Drag it into the Applications folder first, then open it from there.':
         'Mirrorway disk görüntüsünden ya da İndirilenler klasöründen çalışıyor. Önce Uygulamalar klasörüne sürükleyin, sonra oradan açın.',
+    'Show a ring where the pointer appears':
+        'İmlecin çıktığı yerde halka göster',
+    'For half a second after switching computers; set separately on Windows':
+        'Bilgisayar değiştirince yarım saniye; Windows için ayrıca ayarlanır',
+    "When the Mac's pointer arrives, for half a second":
+        "Mac'in imleci geldiğinde yarım saniye",
 }

@@ -100,6 +100,8 @@ def _general(cfg, ctx) -> Page:
     items = [
         Item("segmented", "side", T("Windows is on this side of the screen"), side, sides()),
         Item("switch", "edge_switch", T("Switch at the screen edge"), bool(cfg.get("edge_switch"))),
+        Item("switch", "switch_ring", T("Show a ring where the pointer appears"), bool(cfg.get("switch_ring", True)),
+             detail=T("For half a second after switching computers; set separately on Windows")),
         Item("switch", "login", T("Open at login"), bool(login.get("enabled")),
              detail="" if login.get("available") else T("Only when Mirrorway runs as Mirrorway.app"),
              enabled=bool(login.get("available"))),
@@ -362,6 +364,8 @@ def win_pages(cfg, ctx: Optional[dict] = None) -> List[Page]:
     general = [
         Item("switch", "quick_panel", T("Clicking the tray icon opens the panel"), bool(cfg.get("quick_panel", True)),
              detail=T("Otherwise it opens the Mac's screen (after Mirrorway restarts)")),
+        Item("switch", "switch_ring", T("Show a ring where the pointer appears"), bool(cfg.get("switch_ring", True)),
+             detail=T("When the Mac's pointer arrives, for half a second")),
         Item("popup", "language", T("Language"), cfg.get("language") or "auto", languages(),
              detail=T("Used after Mirrorway restarts")),
         Item("button", "action:logs", T("Log files"), button=T("Open")),

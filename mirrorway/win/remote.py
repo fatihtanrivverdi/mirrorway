@@ -40,6 +40,7 @@ class RemoteControl:
         self.keys_down: Set[Tuple[int, int, int]] = set()
         self.buttons_down: Set[int] = set()
         self.listeners: List[Callable[[bool], None]] = []
+        self.enter_listeners: List[Callable[[float, float], None]] = []     # where the pointer arrived (the ring)
         self.edge_guard = EdgeGuard(clock)
         self.extend_rect: Optional[Rect] = None      # second screen: the monitor that shows the Mac's virtual display
         self._guards: dict = {}
@@ -111,6 +112,11 @@ class RemoteControl:
             for g in self._guards.values():
                 g.reset(armed=False)
         self._notify()
+        for fn in list(self.enter_listeners):
+            try:
+                fn(x, y)
+            except Exception:
+                pass
 
     def on_exit(self) -> None:
         with self.lock:

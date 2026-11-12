@@ -428,7 +428,41 @@ def settings_window():
     return f"{len(w.pages)} pages"
 
 
+def switch_ring():
+    """The switch ring: a borderless, click-through window centred on the point (global coordinates, origin top
+    left), the two ring layers animating; it goes away after the animation, and a new switch restarts it."""
+    from AppKit import NSApplication, NSDate, NSRunLoop, NSScreen
+    from mirrorway import ring as R
+    from mirrorway.mac.ring import RingWindow
+
+    def spin(seconds):
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(seconds))
+
+    NSApplication.sharedApplication().setActivationPolicy_(1)
+    ring = RingWindow()
+    main = NSScreen.screens()[0].frame()
+    x, y = main.size.width / 2.0, main.size.height / 2.0 - 100
+    ring.show(x, y)
+    assert ring.visible(), "the ring window did not appear"
+    f = ring.window.frame()
+    cx, cy = f.origin.x + f.size.width / 2.0, f.origin.y + f.size.height / 2.0
+    assert abs(cx - x) < 1 and abs(cy - (main.size.height - y)) < 1, (cx, cy, x, y)
+    assert ring.window.ignoresMouseEvents() and len(ring.layers) == 2
+    assert all(lay.animationForKey_("ring") is not None for lay, _ in ring.layers), "no animation"
+    spin(R.DURATION + 0.4)
+    assert not ring.visible(), "the ring window stayed"
+    ring.show(x + 50, y)
+    spin(0.15)
+    ring.show(x + 80, y)
+    spin(0.3)
+    assert ring.visible(), "the restarted ring went away too early"
+    spin(0.5)
+    assert not ring.visible()
+    return f"{ring.shown} rings, {f.size.width:.0f} pt"
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
+check("Switch ring (AppKit, Core Animation)", switch_ring)
 check("Quick panel (AppKit)", quick_panel)
 check("Quick panel on a real status item", status_item_panel)
 check("Settings window (AppKit)", settings_window)

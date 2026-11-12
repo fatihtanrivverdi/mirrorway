@@ -234,6 +234,49 @@ def hotkeys():
     return f"registered {hk.registered}, taken {hk.failed}"
 
 
+def switch_ring():
+    """The switch ring: a layered, click-through window plays the frames where the pointer arrived and hides again;
+    a second switch during the animation restarts it at the new place; the thread stops cleanly."""
+    import ctypes
+    import time
+    from mirrorway.win import winapi
+    from mirrorway.win.ring import RingIndicator, monitor_scale
+    winapi.set_dpi_aware()
+    ring = RingIndicator()
+    ring.start()
+    assert ring.ready.wait(10) and ring._hwnd, "no ring window"
+    u = ctypes.windll.user32
+    hwnd = ctypes.c_void_p(ring._hwnd)
+    ex = u.GetWindowLongW(hwnd, -20)                                    # GWL_EXSTYLE
+    for flag, name in ((0x80000, "layered"), (0x20, "click-through"), (0x8, "topmost"), (0x80, "tool window"),
+                       (0x08000000, "no activate")):
+        assert ex & flag, f"not {name}"
+
+    def wait_shown(n):
+        end = time.monotonic() + 5
+        while ring.shown < n and time.monotonic() < end:
+            time.sleep(0.02)
+        assert ring.shown >= n, f"{ring.shown} rings played, expected {n}"
+    t0 = time.monotonic()
+    ring.show(400, 300)
+    wait_shown(1)
+    took = time.monotonic() - t0
+    size = ring.last_rect[2]
+    assert ring.last_rect == (400 - size // 2, 300 - size // 2, size), ring.last_rect
+    assert ring.frames >= 25 and 0.4 < took < 2.0, (ring.frames, took)
+    assert not u.IsWindowVisible(hwnd), "the ring window stayed visible"
+    ring.show(500, 300)
+    time.sleep(0.15)
+    ring.show(600, 320)
+    wait_shown(3)
+    assert ring.last_rect[:2] == (600 - size // 2, 320 - size // 2), ring.last_rect
+    t = ring._thread
+    ring.stop()
+    t.join(5)
+    assert not t.is_alive(), "the ring thread did not stop"
+    return f"{ring.frames} frames in {ring.shown} rings, first {took:.2f} s, scale {monitor_scale(400, 300):.2f}"
+
+
 def tray_panel():
     """The tray panel (Tk) in light and dark theme; printed as PNG (base64) for a look from the CI log."""
     import base64
@@ -375,6 +418,7 @@ check("DPAPI", dpapi)
 check("Settings window (Tk)", settings_window)
 check("Start with Windows (Startup shortcut)", startup_link)
 check("Shortcuts (RegisterHotKey)", hotkeys)
+check("Switch ring (layered window)", switch_ring)
 check("Tray panel (Tk)", tray_panel)
 check("H.264 encoding + decoding", h264)
 check("SDL2 window and YUV texture", sdl)
