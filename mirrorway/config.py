@@ -28,6 +28,7 @@ MAC_DEFAULTS = {
     "pair_code": "",
     "language": "auto",         # interface language: auto (system), en, tr
     "side": "right",            # where Windows sits relative to the Mac: right/left/top/bottom
+    "layout": None,             # 3.5: {"side", "offset"} dragged in Settings › Arrangement; None = the whole edge
     "speed": 1.0,               # pointer speed multiplier on Windows (on top of the automatic speed)
     "auto_speed": True,         # base speed = Windows monitor width / Mac screen width
     "option_unicode": True,     # Option + key -> the character the Mac would type, sent to Windows as Unicode
@@ -55,6 +56,7 @@ MAC_DEFAULTS = {
     "audio_apps": {},           # the selected apps: {bundle id: name}
     "extend_monitor": None,     # second screen: None = off, [x, y, w, h] = the Windows monitor that extends the Mac
     "win_monitors": [],         # monitors Windows reported last (for the menu while Windows is not connected)
+    "win_monitor_scales": [],   # their display scales (3.5, for the arrangement picture)
     "extend_last": None,        # the monitor chosen last ([x, y, w, h]); the panel's tile turns it back on
     "quick_panel": True,        # clicking the menu bar icon opens the panel (False: the classic menu)
     "menubar_state": True,      # "•" (connected) and " Win" (controlling Windows) next to the menu bar icon

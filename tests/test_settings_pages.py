@@ -28,9 +28,9 @@ def pages(c=None, st=None, **ctx):
 
 def test_page_list_and_shapes():
     ps = P.mac_pages(cfg(), status())
-    assert [p.id for p in ps] == ["general", "keyboard", "screen", "audio", "clipboard", "network", "devices",
+    assert [p.id for p in ps] == ["general", "arrange", "keyboard", "screen", "audio", "clipboard", "network", "devices",
                                   "updates"]
-    kinds = {"switch", "segmented", "popup", "button", "text", "keys"}
+    kinds = {"switch", "segmented", "popup", "button", "text", "keys", "arrange"}
     for p in ps:
         assert p.title and p.symbol and p.color.startswith("#")
         keys = [it.key for it in p.items()]

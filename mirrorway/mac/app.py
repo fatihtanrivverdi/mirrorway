@@ -1022,8 +1022,20 @@ class MirrorwayMacApp(rumps.App):
                        "previous": U.previous_version()},
             "permission": not (tap is not None and tap.error == "permission" and not tap.is_alive()),
             "version": __version__,
+            "arrange": self._arrange_ctx(),
         }
         return prefs.mac_pages(self.cfg, st, ctx)
+
+    def _arrange_ctx(self) -> dict:
+        """The Mac's displays and Windows' monitors (connected now, or as Windows reported them last)."""
+        r = self.server.router
+        try:
+            mac = [[d.x, d.y, d.w, d.h] for d in self.server.platform.displays()]
+        except Exception:
+            mac = []
+        win = [[m.x, m.y, m.w, m.h] for m in r.win_monitors] or list(self.cfg.get("win_monitors") or [])
+        scales = list(r.win_scales) if r.win_monitors else list(self.cfg.get("win_monitor_scales") or [])
+        return {"mac": mac, "win": win, "scales": scales}
 
     def open_settings(self, page=None) -> None:
         try:
@@ -1094,6 +1106,18 @@ class MirrorwayMacApp(rumps.App):
             elif key == "side":
                 cfg.set("side", value)
                 router.reload_settings()
+                self._check_group(self.side_items, value)
+                self._refresh_static()
+            elif key == "layout":                             # dragged in Settings › Arrangement
+                side = value.get("side") if isinstance(value, dict) else None
+                if side in ARROWS:
+                    cfg.set("side", side)
+                    cfg.set("layout", {"side": side, "offset": round(float(value.get("offset") or 0.0), 1)})
+                    router.reload_settings()
+                    self._check_group(self.side_items, side)
+                    self._refresh_static()
+                    log.info("Arrangement: Windows %s, offset %.0f pt", side, float(value.get("offset") or 0.0))
+
             elif key in ("speed", "scroll_speed"):
                 cfg.set(key, float(value))
             elif key in ("keyboard_layout", "swap_cmd_ctrl"):
@@ -1154,7 +1178,10 @@ class MirrorwayMacApp(rumps.App):
         self.refresh_panel()
 
     def _settings_action(self, name: str) -> None:
-        if name.startswith("perm:"):
+        if name == "layout_reset":
+            self.cfg.set("layout", None)
+            log.info("Arrangement: the whole edge again")
+        elif name.startswith("perm:"):
             _open(PRIVACY_URLS[name[len("perm:"):]])
         elif name.startswith("remove_device:"):
             dev_id = name[len("remove_device:"):]

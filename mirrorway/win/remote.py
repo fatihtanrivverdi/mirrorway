@@ -44,6 +44,7 @@ class RemoteControl:
         self.edge_guard = EdgeGuard(clock)
         self.extend_rect: Optional[Rect] = None      # second screen: the monitor that shows the Mac's virtual display
         self._guards: dict = {}
+        self.exit_span: Optional[Tuple[float, float]] = None   # 3.5: the part of the exit edge that faces the Mac
 
     def _monitors(self, refresh: bool = False) -> List[Rect]:
         now = self.clock()
@@ -86,6 +87,11 @@ class RemoteControl:
             g = self._guards[side] = EdgeGuard(self.clock)
         return g
 
+    def _faces_mac(self, ratio: float) -> bool:
+        """With an arrangement (3.5) only the part of the edge that faces the Mac leads back; the rest is a wall."""
+        span = self.exit_span
+        return span is None or span[0] - 1e-6 <= ratio <= span[1] + 1e-6
+
     def _notify(self) -> None:
         for fn in list(self.listeners):
             try:
@@ -107,6 +113,12 @@ class RemoteControl:
             ratio = float(info.get("ratio", 0.5))
             exit_side = info.get("exit") or (from_side if from_side != "center" else "left")
             self.exit_side = exit_side
+            span = info.get("span")
+            try:
+                self.exit_span = (float(span[0]), float(span[1])) if isinstance(span, list) and len(span) == 2 \
+                    else None
+            except (TypeError, ValueError):
+                self.exit_span = None
             pos = info.get("pos")
             here = self._pointer_on(rects) if from_side == "center" else None
             if isinstance(pos, list) and len(pos) == 2:
@@ -150,7 +162,7 @@ class RemoteControl:
             if self.extend_rect is None:
                 if self.clock() - self._last_enter > ENTER_COOLDOWN:
                     ratio = self.edge_guard.check(self._monitors(), x, y, ix, iy, self.exit_side, corner_guard=0)
-                    if ratio is not None:
+                    if ratio is not None and self._faces_mac(ratio):
                         self._leave(ratio)
                         return
                 self.backend.move_to(x + ix, y + iy)
@@ -168,7 +180,7 @@ class RemoteControl:
                         if hit is not None:
                             self._leave(ratio, vd=X.m_fraction(m, *hit))
                             return
-                    if side == self.exit_side:
+                    if side == self.exit_side and self._faces_mac(ratio):
                         self._leave(ratio)
                         return
             nx, ny = x + ix, y + iy

@@ -470,6 +470,49 @@ def settings_window():
     return f"{len(w.pages)} pages"
 
 
+def arrangement_view():
+    """Settings › Arrangement (3.5): the picture is built with two Windows monitors, a drop snaps to the nearest side
+    and saves the arrangement; the page is printed as PNG."""
+    import base64
+
+    from AppKit import NSApplication, NSDate, NSRunLoop
+    from mirrorway.config import Config, MAC_DEFAULTS
+    from mirrorway.mac import app as A
+
+    def spin(seconds):
+        NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(seconds))
+
+    NSApplication.sharedApplication().setActivationPolicy_(1)
+    cfg = Config("mac-ci-arrange", MAC_DEFAULTS)
+    cfg.set("side", "bottom")
+    cfg.set("win_monitors", [[0, 0, 1920, 1080], [1920, 0, 1920, 1080]])
+    cfg.set("win_monitor_scales", [1.25, 1.25])
+    a = A.MirrorwayMacApp(cfg)
+    a.open_settings("arrange")
+    spin(0.5)
+    w = a.settings_win
+    view = w._pictures["layout"][0]
+    p = view.mw_picture
+    assert p is not None and len(p.win) == 2, "no picture"
+    before = p.win[0]
+    lay = view.mw_drop(-30, 6)                          # a little to the left, still below the Mac
+    spin(0.3)
+    saved = cfg.get("layout")
+    assert lay is not None and lay.side == "bottom" and saved == lay.to_cfg(), (lay, saved)
+    page = next(pg for pg in w.pages if pg.id == "arrange")
+    assert page.item("arrange_state").title == "Real position" and page.item("action:layout_reset").enabled
+    png = w.render_png("arrange")
+    print("----- SETTINGS PNG arrange-light -----")
+    print(base64.b64encode(png).decode("ascii"))
+    print("----- END SETTINGS PNG arrange-light -----")
+    a.apply_setting("action:layout_reset", None)
+    assert cfg.get("layout") is None
+    w.close()
+    spin(0.3)
+    return (f"display {p.mac[0].w:.0f}x{p.mac[0].h:.0f} pt, Windows monitor 1 {before.w:.0f}x{before.h:.0f} pt "
+            f"(1920 px at 125 %), dropped: {saved}")
+
+
 def switch_ring():
     """The switch ring: a borderless, click-through window centred on the point (global coordinates, origin top
     left), the two ring layers animating; it goes away after the animation, and a new switch restarts it."""
@@ -606,6 +649,7 @@ check("Switch ring (AppKit, Core Animation)", switch_ring)
 check("Quick panel (AppKit)", quick_panel)
 check("Quick panel on a real status item", status_item_panel)
 check("Settings window (AppKit)", settings_window)
+check("Settings › Arrangement picture (drag and snap)", arrangement_view)
 check("Keychain", keychain)
 check("Menu bar app modules", app_imports)
 check("TLS: GitHub with the macOS root certificates", tls_roots)

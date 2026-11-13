@@ -14,10 +14,11 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
+from .. import arrange as A
 from .. import gestures as G
 from .. import quick
 from ..extend import vd_point
-from ..geometry import OPPOSITE, EdgeGuard, containing, entry_point
+from ..geometry import OPPOSITE, EdgeGuard, Rect, containing, entry_point
 from ..keymap import (FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT, MAC_CAPS, MAC_FN, MAC_LOPT,
                       MAC_ROPT, KeyTranslator, modifier_is_down)
 from ..protocol import (MSG_BUTTON, MSG_ENTER, MSG_GESTURE, MSG_EXIT, MSG_KEY, MSG_MOVE, MSG_RELEASE_ALL,
@@ -119,6 +120,8 @@ class Router:
         self._acc_h = 0.0
         self._listeners: List[Callable[[bool], None]] = []
         self.auto_scale = 1.0                 # Windows/Mac screen width ratio
+        self.win_monitors: List[Rect] = []    # Windows' monitors (pixels) and their scales, for the arrangement (3.5)
+        self.win_scales: List[float] = []
         self.edge_guard = EdgeGuard(clock)    # prevents accidental switching back at the edge
         self.opt_pending: Set[int] = set()    # Option keys that are down but not yet sent to Windows
         self.text_keys: Set[int] = set()      # keys typed as Unicode (their release is swallowed)
@@ -165,6 +168,22 @@ class Router:
         s = self.settings.get("side")
         return s if s in _HOTKEYS else "right"
 
+    def set_win_monitors(self, rects: List[Rect], scales: Optional[List[float]] = None) -> None:
+        with self.lock:
+            self.win_monitors = list(rects)
+            self.win_scales = list(scales or [])
+
+    def arrangement(self, displays=None):
+        """(Layout, Geometry) when an arrangement is set for the current side and Windows' monitors are known;
+        None: the whole edge in proportion (also while the second screen routes the pointer)."""
+        lay = A.from_cfg(self.settings.get("layout"), self.side)
+        if lay is None or not self.win_monitors or self._extend_routes():
+            return None
+        displays = displays if displays is not None else self.platform.displays()
+        if not displays:
+            return None
+        return lay, A.Geometry(displays, self.win_monitors, self.win_scales, self.side)
+
     # ---- main entry point ------------------------------------------------
     def handle(self, ev: InputEvent) -> int:
         with self.lock:
@@ -205,6 +224,11 @@ class Router:
                     return PASS
                 ratio = self.edge_guard.check(displays, ev.x, ev.y, ev.dx, ev.dy, self.side)
                 if ratio is not None:
+                    arr = self.arrangement(displays)
+                    if arr is not None:
+                        ratio = arr[1].mac_to_win(arr[0], ratio)
+                        if ratio is None:
+                            return PASS                  # no Windows monitor faces this part of the edge: a wall
                     self._enter(OPPOSITE[self.side], ratio, pos=(ev.x, ev.y))
             return PASS
         # Movement comes from the change in position rather than the events' delta field: after warping the
@@ -558,6 +582,11 @@ class Router:
         except Exception:
             log.exception("could not hide the pointer")
         msg = {"from": from_side, "ratio": float(ratio), "exit": OPPOSITE[self.side]}
+        arr = self.arrangement() if win_pos is None else None
+        if arr is not None:
+            span = arr[1].win_span(arr[0])
+            if span is not None:
+                msg["span"] = [round(span[0], 5), round(span[1], 5)]   # where Windows' edge leads back to the Mac
         if win_pos is not None:
             msg["pos"] = [float(win_pos[0]), float(win_pos[1])]
         mrect = None
@@ -609,6 +638,9 @@ class Router:
                 main = self.platform.main_display()
                 pos = (main.x + main.w / 2.0, main.y + main.h / 2.0)
         else:
+            arr = self.arrangement(displays)
+            if arr is not None:
+                ratio = arr[1].win_to_mac(arr[0], ratio)
             pos = entry_point(displays, self.side, ratio, inset=4)
         try:
             self.platform.warp(*pos)

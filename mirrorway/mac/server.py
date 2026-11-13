@@ -169,6 +169,8 @@ class ControlSession:
                 elif mtype == MSG_HELLO:
                     upd = json.loads(payload.decode("utf-8"))
                     self.hello.update(upd)
+                    if "monitors" in upd and not self.secure:
+                        self.server._win_monitors_from(self.hello)
                     if "adapters" in upd:
                         self.server.learn_wol(self, upd)
         except Exception as exc:
@@ -1210,8 +1212,25 @@ class MirrorwayServer:
         c = self.control
         return c is not None and feature in (c.hello.get("features") or [])
 
+    def _win_monitors_from(self, hello: dict) -> None:
+        """Windows' monitors and their display scales: for the arrangement (router) and the Settings picture."""
+        from ..arrange import rects_of
+        rects = rects_of(hello.get("monitors"))
+        scales = hello.get("monitor_scales") or []
+        try:
+            scales = [float(v) for v in scales] if len(scales) == len(rects) else []
+        except (TypeError, ValueError):
+            scales = []
+        self.router.set_win_monitors(rects, scales)
+        if scales and scales != self.cfg.get("win_monitor_scales"):
+            self.cfg.set("win_monitor_scales", scales)
+
     def _update_auto_scale(self, sess: "ControlSession") -> None:
         """Automatic pointer speed: Windows primary monitor width (pixels) / Mac main display width (points)."""
+        try:
+            self._win_monitors_from(sess.hello)
+        except Exception:
+            log.exception("Could not read Windows' monitors")
         try:
             mons = sess.hello.get("monitors") or []
             mac_w = float(self.platform.main_display().w)

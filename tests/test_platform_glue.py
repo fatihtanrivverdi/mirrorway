@@ -342,7 +342,7 @@ def test_mac_app_settings_window_changes():
         a = A.MirrorwayMacApp(cfg)
         a.server.load_identity()
         pages = {p.id: p for p in a.settings_pages()}
-        assert len(pages) == 8 and pages['general'].item('side').value == 'right'
+        assert len(pages) == 9 and pages['general'].item('side').value == 'right'
         titles = [i.title for i in a.menu._order if i is not None]
         assert 'Settings…' in titles, titles
         reloads = []

@@ -80,6 +80,12 @@ def _audio_capture_factory():
     return default_capture
 
 
+def _monitor_scales(mons) -> list:
+    """Each monitor's display scale (1.0 = 100 %), for the Mac's screen arrangement."""
+    from .ring import monitor_scale
+    return [monitor_scale(int(r.x + r.w / 2), int(r.y + r.h / 2)) for r in mons]
+
+
 class WinApp:
     def __init__(self, cfg, open_viewer: bool = False):
         self.cfg = cfg
@@ -141,6 +147,7 @@ class WinApp:
                                      files_dir=CONFIG_DIR,
                                      audio_player_factory=_audio_player_factory(),
                                      audio_capture_factory=_audio_capture_factory(),
+                                     scales_fn=_monitor_scales if sys.platform == "win32" else None,
                                      on_notify=lambda title, msg: self._post(self._show_notification, title, msg),
                                      lock_fn=winapi.lock_workstation if sys.platform == "win32" else None)
         self.control.enable_log_forwarding()

@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.5.0 — screen arrangement
+- **Settings › Arrangement** on the Mac: a picture of the Mac's displays and Windows's monitors. Drag the Windows
+  monitors (as one group) to where they stand on your desk; they snap to the nearest side of the Mac, which also
+  sets "Windows is on this side". Sizes are in the same units on both sides (Mac points; Windows pixels divided by
+  Windows's display scale, which Windows now reports).
+- With an arrangement the pointer crosses straight, like between displays on a Mac: only the part where the screens
+  face each other leads across, the rest of each edge is a wall. Out and back through the same spot lands where it
+  left. **Reset** returns to the default (the Mac's edge leads to the whole of Windows's edge, in proportion), and
+  so does choosing another side in the menu. While the second screen is open its own routes apply, as before.
+- Windows keeps its walls when the Mac tells it which part of its edge faces the Mac (3.5); an older Windows
+  lets the pointer back from anywhere on its edge and the Mac places it at the nearest point.
+
 ## 3.4.1 — Windows's sound on the Mac, first release
 3.4.0 was not published: one test failed on the Windows runner. Everything in 3.4.0 below is in this version, plus:
 - On the Mac, Windows's sound keeps the AudioQueue running through short gaps (rebuffering) and pauses the audio

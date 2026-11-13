@@ -25,6 +25,7 @@ CONTENT_W = WIN_W - SIDE_W
 MARGIN = 28
 CARD_W = CONTENT_W - 2 * MARGIN
 ROW_H, ROW_H_DETAIL = 44, 54
+ARRANGE_H = 280                                # the arrangement picture (3.5)
 
 # window style: titled, closable, miniaturizable
 STYLE = 1 | 2 | 4
@@ -55,6 +56,7 @@ class SettingsWindow:
         self._controls: List[tuple] = []         # (key, kind, options, control)
         self._rows: Dict[str, tuple] = {}         # key -> (title label, detail label or None, control or None)
         self._shown: Dict[int, object] = {}       # control index -> last value set
+        self._pictures: Dict[str, tuple] = {}     # key -> (arrangement view, last model)
         self._target = make_target(click=self._side_clicked, change=self._changed, closed=self._closed)
         self.visible = False
 
@@ -186,7 +188,7 @@ class SettingsWindow:
         return ctl
 
     def _build_page(self, page: prefs.Page) -> None:
-        self._controls, self._rows, self._shown = [], {}, {}
+        self._controls, self._rows, self._shown, self._pictures = [], {}, {}, {}
         doc = MirrorwayPanelBox.alloc().initWithFrame_(NSMakeRect(0, 0, CONTENT_W - 1, 100))
         doc.mw_style = None
         title = _label(doc, NSMakeRect(MARGIN, 22, CARD_W, 28), 20, NSFontWeightBold)
@@ -198,12 +200,22 @@ class SettingsWindow:
                              color=NSColor.secondaryLabelColor())
                 lab.setStringValue_(g.title)
                 y += 24
-            heights = [ROW_H_DETAIL if it.detail else ROW_H for it in g.items]
+            heights = [ARRANGE_H + 40 if it.kind == "arrange" else ROW_H_DETAIL if it.detail else ROW_H
+                       for it in g.items]
             card = _box(doc, NSMakeRect(MARGIN, y, CARD_W, sum(heights)), "card")
             ry = 0
             for i, (it, h) in enumerate(zip(g.items, heights)):
                 if i:
                     _box(card, NSMakeRect(14, ry, CARD_W - 14, 1), "line")
+                if it.kind == "arrange":
+                    from . import arrange_view
+                    t = _label(card, NSMakeRect(14, ry + 13, CARD_W - 28, 18), 13)
+                    view = arrange_view.make(card, NSMakeRect(14, ry + 36, CARD_W - 28, ARRANGE_H - 4),
+                                             self.on_change)
+                    self._pictures[it.key] = (view, None)
+                    self._rows[it.key] = (t, None, None)
+                    ry += h
+                    continue
                 ctl = self._control(card, it, CARD_W - 14, ry + h / 2.0)
                 right = 14 + (ctl.frame().size.width + 16 if ctl is not None else (100 if it.kind == "keys" else 0))
                 t = _label(card, NSMakeRect(14, ry + (9 if it.detail else 13), CARD_W - 14 - right, 18), 13)
@@ -240,6 +252,10 @@ class SettingsWindow:
                 continue
             t, d, ctl = row
             t.setStringValue_(it.title)
+            pic = self._pictures.get(it.key)
+            if pic is not None and pic[1] != it.value:
+                pic[0].mw_set_model(it.value)
+                self._pictures[it.key] = (pic[0], it.value)
             dim = not it.enabled and it.kind != "button"
             t.setTextColor_(NSColor.tertiaryLabelColor() if dim else NSColor.labelColor())
             if d is not None:

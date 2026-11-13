@@ -1025,4 +1025,24 @@ TR = {
         "Ses",
     "All on this PC":
         "Hepsi bu bilgisayarda",
+    "Drag the Windows monitors to the edge of the Mac where they stand on your desk; they snap to the nearest side. Sizes follow each computer's display scale.":
+        "Windows monitörlerini masanızda durdukları gibi Mac'in kenarına sürükleyin; en yakın kenara yapışırlar. Boyutlar her bilgisayarın ekran ölçeğine göredir.",
+    "Arrangement":
+        "Ekran düzeni",
+    "Drag Windows next to the Mac":
+        "Windows'u Mac'in yanına sürükleyin",
+    "Use the whole edge again":
+        "Yeniden kenarın tamamını kullan",
+    "Windows' monitors appear here once Windows connects":
+        "Windows bağlanınca monitörleri burada görünür",
+    "Real position":
+        "Gerçek konum",
+    "Whole edge":
+        "Kenarın tamamı",
+    "Until then the Mac's edge on the side in General leads to the whole of Windows' edge.":
+        "O zamana kadar Mac'in Genel'de seçilen kenarı Windows'un kenarının tamamına açılır.",
+    "The pointer crosses straight where the screens face each other; the rest of the edge is a wall.":
+        "İmleç ekranların karşılıklı durduğu yerden düz geçer; kenarın geri kalanı duvardır.",
+    "The Mac's edge leads to the whole of Windows' edge, in proportion.":
+        "Mac'in kenarı Windows'un kenarının tamamına orantılı olarak açılır.",
 }

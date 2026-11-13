@@ -39,7 +39,7 @@ def languages():
 
 @dataclass
 class Item:
-    kind: str                     # switch, segmented, popup, button, text, keys
+    kind: str                     # switch, segmented, popup, button, text, keys, arrange (the Mac's picture)
     key: str
     title: str
     value: Any = None
@@ -331,15 +331,53 @@ def _updates(cfg, ctx) -> Page:
     ])
 
 
+def arrange_model(cfg, ctx) -> Optional[dict]:
+    """What the arrangement picture needs: the Mac's displays (points), Windows' monitors (pixels) and their scales,
+    the side and the saved offset (None: the whole edge, drawn centred)."""
+    from . import arrange as AR
+    a = ctx.get("arrange") or {}
+    mac, win = AR.rects_of(a.get("mac")), AR.rects_of(a.get("win"))
+    if not mac or not win:
+        return None
+    side = cfg.get("side") if cfg.get("side") in AR.SIDES else "right"
+    lay = AR.from_cfg(cfg.get("layout"), side)
+    scales = [float(v) for v in (a.get("scales") or [])]
+    return {"mac": [[r.x, r.y, r.w, r.h] for r in mac], "win": [[r.x, r.y, r.w, r.h] for r in win],
+            "scales": scales if len(scales) == len(win) else [], "side": side,
+            "offset": lay.offset if lay is not None else None}
+
+
+def _arrange(cfg, st, ctx) -> Page:
+    model = arrange_model(cfg, ctx)
+    if model is None:
+        items = [Item("text", "arrange_wait", T("Windows' monitors appear here once Windows connects"),
+                      detail=T("Until then the Mac's edge on the side in General leads to the whole of Windows' edge."))]
+        return Page("arrange", T("Arrangement"), "rectangle.on.rectangle", "#3B6FD8", [Group("", items)])
+    placed = model["offset"] is not None
+    picture = [Item("arrange", "layout", T("Drag Windows next to the Mac"), model)]
+    state = [
+        Item("text", "arrange_state", T("Real position") if placed else T("Whole edge"),
+             detail=T("The pointer crosses straight where the screens face each other; the rest of the edge is a "
+                      "wall.") if placed else
+             T("The Mac's edge leads to the whole of Windows' edge, in proportion.")),
+        Item("button", "action:layout_reset", T("Use the whole edge again"), button=T("Reset"), enabled=placed),
+    ]
+    note = T("Drag the Windows monitors to the edge of the Mac where they stand on your desk; they snap to the "
+             "nearest side. Sizes follow each computer's display scale.")
+    return Page("arrange", T("Arrangement"), "rectangle.on.rectangle", "#3B6FD8",
+                [Group("", picture, note), Group("", state)])
+
+
 def mac_pages(cfg, st: dict, ctx: Optional[dict] = None) -> List[Page]:
     """The Mac Settings window.
 
     ctx: displays [(index, label)], extend_choices [(label, value)], extend_text, audio_text, files_text,
-         login {"available", "enabled"}, update {"text", "busy", "available", "previous"}, permission, version
+         login {"available", "enabled"}, update {"text", "busy", "available", "previous"}, permission, version,
+         arrange {"mac": [[x, y, w, h]] points, "win": [[x, y, w, h]] pixels, "scales": [float]}
     """
     ctx = ctx or {}
-    return [_general(cfg, ctx), _keyboard(cfg, st), _screen(cfg, st, ctx), _audio(cfg, st, ctx),
-            _clipboard(cfg, st, ctx), _network(cfg, st), _devices(st), _updates(cfg, ctx)]
+    return [_general(cfg, ctx), _arrange(cfg, st, ctx), _keyboard(cfg, st), _screen(cfg, st, ctx),
+            _audio(cfg, st, ctx), _clipboard(cfg, st, ctx), _network(cfg, st), _devices(st), _updates(cfg, ctx)]
 
 
 # ---- Windows Settings window -------------------------------------------------------------------------------------

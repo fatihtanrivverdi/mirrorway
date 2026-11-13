@@ -177,7 +177,8 @@ class ControlClient(threading.Thread):
                  credentials: Optional[Credentials] = None, on_view: Optional[Callable[[dict], None]] = None,
                  files_dir=None, on_notify: Optional[Callable[[str, str], None]] = None,
                  audio_player_factory: Optional[Callable] = None, lock_fn: Optional[Callable[[], object]] = None,
-                 audio_capture_factory: Optional[Callable] = None, speakers=None):
+                 audio_capture_factory: Optional[Callable] = None, speakers=None,
+                 scales_fn: Optional[Callable] = None):
         super().__init__(daemon=True, name="mirrorway-control")
         self.on_view = on_view                 # the Mac asked for its screen window to open (second screen)
         self.lock_fn = lock_fn                 # locks Windows (the Mac locked, with "Lock both computers together")
@@ -202,6 +203,7 @@ class ControlClient(threading.Thread):
         self.remote = remote
         self.on_status = on_status or (lambda state, text: None)
         self.monitors_fn = monitors_fn or (lambda: [])
+        self.scales_fn = scales_fn             # monitors -> their display scales (3.5: the Mac's arrangement)
         self.ch = None
         self.server_name = ""
         self.server_version = ""
@@ -291,6 +293,15 @@ class ControlClient(threading.Thread):
         a = self.audio
         return bool(a is not None and a.running)
 
+    def _scales(self, mons) -> list:
+        if self.scales_fn is None or not mons:
+            return []
+        try:
+            return [round(float(v), 3) for v in self.scales_fn(mons)]
+        except Exception as exc:
+            log.info("Could not read the monitors' scales: %s", exc)
+            return []
+
     def can_route_audio(self) -> bool:
         """The Mac takes "where sound plays" from here and this Windows can send its sound (both 3.4 or later)."""
         return self.winaudio is not None and AU.WINAUDIO_FEATURE in self.server_features() and self.can_ask_mac()
@@ -369,8 +380,10 @@ class ControlClient(threading.Thread):
             try:
                 sock = socket.create_connection((host, port), timeout=5)
                 tune_socket(sock)
+                mons = list(self.monitors_fn())
                 hello = {"name": socket.gethostname(), "version": __version__, "protocol": PROTOCOL_VERSION,
-                         "monitors": [[r.x, r.y, r.w, r.h] for r in self.monitors_fn()],
+                         "monitors": [[r.x, r.y, r.w, r.h] for r in mons],
+                         "monitor_scales": self._scales(mons),
                          "auto_update": True,
                          "features": ["echo", "text", "devkeys", RC.FEATURE, EXTEND_FEATURE, GESTURES_FEATURE,
                                       FX.FEATURE] + ([AU.FEATURE] if self.audio is not None else [])
