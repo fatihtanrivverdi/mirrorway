@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.5.1 — screen arrangement, first release
+3.5.0 was not published: on the macOS runner the arrangement picture could not be created (pyobjc took its Python
+helper methods for Objective-C selectors), so Settings › Arrangement would not have opened. Fixed, and a test now
+checks every Objective-C class in the Mac app for this without needing a Mac. A test of the Mac refusing Windows's
+sound was made deterministic (it raced with the Mac's own audio state on connect). Everything in 3.5.0 below is in
+this version.
+
 ## 3.5.0 — screen arrangement
 - **Settings › Arrangement** on the Mac: a picture of the Mac's displays and Windows's monitors. Drag the Windows
   monitors (as one group) to where they stand on your desk; they snap to the nearest side of the Mac, which also

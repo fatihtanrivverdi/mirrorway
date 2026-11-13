@@ -42,6 +42,7 @@ class MirrorwayArrangeView(NSView):
         return True
 
     # -- from Python --
+    @objc.python_method
     def mw_set_model(self, model: Optional[dict]) -> None:
         if self.mw_start is not None:                        # not while the user is dragging
             return
@@ -49,6 +50,7 @@ class MirrorwayArrangeView(NSView):
         self.mw_picture = Picture(model, b.size.width, b.size.height) if model else None
         self.setNeedsDisplay_(True)
 
+    @objc.python_method
     def mw_drop(self, vdx: float, vdy: float) -> Optional[AR.Layout]:
         """Drag the group by (vdx, vdy) view points and drop it (the mouse handlers use this; so does CI)."""
         p = self.mw_picture
@@ -67,6 +69,7 @@ class MirrorwayArrangeView(NSView):
         return lay
 
     # -- mouse --
+    @objc.python_method
     def _point(self, event):
         p = self.convertPoint_fromView_(event.locationInWindow(), None)
         return float(p.x), float(p.y)
@@ -105,6 +108,7 @@ class MirrorwayArrangeView(NSView):
         except Exception:
             log.exception("arrangement drawing")
 
+    @objc.python_method
     def _box(self, r: Rect, fill, stroke, radius=5.0, width=1.0):
         path = NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(
             NSMakeRect(r.x + 0.5, r.y + 0.5, max(r.w - 1, 1), max(r.h - 1, 1)), radius, radius)
@@ -114,6 +118,7 @@ class MirrorwayArrangeView(NSView):
         path.setLineWidth_(width)
         path.stroke()
 
+    @objc.python_method
     def _text(self, r: Rect, text: str, color, size=12.0):
         attrs = {NSFontAttributeName: NSFont.systemFontOfSize_weight_(size, NSFontWeightSemibold),
                  NSForegroundColorAttributeName: color}
@@ -123,6 +128,7 @@ class MirrorwayArrangeView(NSView):
             return
         s.drawAtPoint_withAttributes_((r.x + (r.w - sz.width) / 2, r.y + (r.h - sz.height) / 2), attrs)
 
+    @objc.python_method
     def _draw(self, p: Picture) -> None:
         many = len(p.mac) > 1
         for i, r in enumerate(p.mac):

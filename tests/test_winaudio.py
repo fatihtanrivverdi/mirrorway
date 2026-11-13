@@ -361,9 +361,17 @@ def test_mac_refuses_windows_sound_unless_chosen():
     c.start()
     try:
         wait(lambda: srv.connected() and c.auth_mode == "key", timeout=20, msg="connection")
-        c.winaudio.set_state(True)                    # Windows tries on its own: the Mac says no
-        wait(lambda: "not set to play on the Mac" in c.winaudio.last_error, timeout=10, msg="refused")
-        wait(lambda: not c.winaudio.running and srv.winaudio is None, timeout=10, msg="stopped")
+        # Windows opens its sound channel on its own (the sender itself follows the Mac's state, so it is opened by
+        # hand here): the Mac says why not, and waits for Windows to close
+        from mirrorway.protocol import ROLE_WINAUDIO
+        from mirrorway.win.audio import open_audio_channel
+        ch = open_audio_channel(c, ROLE_WINAUDIO)
+        mtype, payload = ch.recv()
+        assert mtype == A.MSG_AUDIO_INFO and "not set to play on the Mac" in json.loads(payload)["error"]
+        wait(lambda: srv.winaudio is not None, timeout=5, msg="the Mac waits")
+        ch.close()
+        wait(lambda: srv.winaudio is None, timeout=10, msg="closed")
+        assert not caps
     finally:
         c.stop()
         srv.stop()
