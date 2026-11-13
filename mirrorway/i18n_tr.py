@@ -949,4 +949,40 @@ TR = {
         'açık değil',
     'No apps are open':
         'Açık uygulama yok',
+    'Ctrl+Alt+Del on Windows':
+        "Windows'ta Ctrl+Alt+Del",
+    'Needs lock screen support on Windows (its Settings › General)':
+        "Windows'ta kilit ekranı desteği gerekir (oradaki Ayarlar › Genel)",
+    'Could not install: {error}':
+        'Kurulamadı: {error}',
+    'Version {version} is installed; update it to match this Mirrorway':
+        'Kurulu sürüm {version}; bu Mirrorway ile eşleşmesi için güncelleyin',
+    "On: the Mac's keyboard and mouse work on the lock screen, Ctrl+Alt+Del (⌃⌥⌫ on the Mac) and UAC prompts":
+        "Açık: Mac'in klavyesi ve faresi kilit ekranında, Ctrl+Alt+Del'de (Mac'te ⌃⌥⌫) ve UAC pencerelerinde çalışır",
+    'Installed, but the service is not running':
+        'Kurulu ama servis çalışmıyor',
+    'Installing… confirm the Windows prompt':
+        "Kuruluyor… Windows'un sorusunu onaylayın",
+    "Off: the lock screen and UAC prompts take only this PC's own keyboard and mouse":
+        'Kapalı: kilit ekranı ve UAC pencereleri yalnızca bu bilgisayarın kendi klavyesi ve faresiyle kullanılır',
+    'Status':
+        'Durum',
+    'Update lock screen support':
+        'Kilit ekranı desteğini güncelle',
+    'Install lock screen support':
+        'Kilit ekranı desteğini kur',
+    "Asks for administrator permission once; uses this PC's pairing with the Mac":
+        "Bir kez yönetici izni ister; bu bilgisayarın Mac ile eşleşmesini kullanır",
+    'Update…':
+        'Güncelle…',
+    'Install…':
+        'Kur…',
+    'Remove lock screen support':
+        'Kilit ekranı desteğini kaldır',
+    'Remove…':
+        'Kaldır…',
+    'Lock screen':
+        'Kilit ekranı',
+    'version {version}':
+        'sürüm {version}',
 }

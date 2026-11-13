@@ -34,6 +34,7 @@ ROLE_CONTROL = b"C"
 ROLE_VIDEO = b"V"
 ROLE_AUDIO = b"A"          # audio (Mac -> Windows; mirrorway.audio)
 ROLE_FILE = b"F"           # file copy and paste (device keys only; mirrorway.filexfer)
+ROLE_SECURE = b"S"         # Windows' lock screen helper (a SYSTEM process; device keys only; mirrorway.win.secure_helper)
 NONCE_LEN = 16
 MAX_FRAME = 32 * 1024 * 1024
 PROTOCOL_VERSION = 1
@@ -55,6 +56,8 @@ ACTIONS_FEATURE = "actions"
 MSG_LOCK = 15          # s->c  the Mac locked: lock Windows (only with the Mac's "Lock both computers" setting)
 MSG_LOCKED = 16        # c->s JSON {"locked": bool} — Windows was locked / unlocked
 LOCK_FEATURE = "lock"  # both sides: understands MSG_LOCK / MSG_LOCKED
+MSG_SAS = 17           # s->c (secure channel) send Ctrl+Alt+Del (the Windows service calls SendSAS)
+MSG_SECURE_STATE = 18  # c->s (secure channel) JSON {"desktop": "Default"|"Winlogon"|…, "secure": bool}
 MSG_MOVE = 20          # s->c <ff  dx, dy  (Windows pikseli)
 MSG_BUTTON = 21        # s->c <BB  button, pressed(1)/released(0)
 MSG_SCROLL = 22        # s->c <ii  vertical, horizontal (WHEEL_DELTA units, 120 = one notch)

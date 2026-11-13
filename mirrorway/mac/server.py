@@ -22,12 +22,15 @@ from ..devkeys import KeyUnavailable, b64d, b64e, fingerprint, load_identity
 from ..h264 import FLAG_KEY
 from ..secure import (MAGIC2, MSG_ENROLL, ROLE_PAIR, ST_TOO_MANY, PairingClosed,
                       UnknownDevice, format_code, new_pairing_code, server_accept, server_pair)
-from ..protocol import (ACTIONS_FEATURE, LOCK_FEATURE, MSG_LOCK, MSG_LOCKED, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
+from ..protocol import (ACTIONS_FEATURE, LOCK_FEATURE, MSG_BUTTON, MSG_ENTER, MSG_EXIT, MSG_GESTURE, MSG_KEY,
+                        MSG_RELEASE_ALL, MSG_SAS, MSG_SCROLL, MSG_SECURE_STATE, MSG_TEXT, ROLE_SECURE,
+                        MSG_LOCK, MSG_LOCKED, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LEAVE, MSG_LOG, MSG_MOVE, MSG_PING, MSG_STATS,
                         MSG_UPDATE, MSG_UPDATE_RESULT,
                         MSG_VIDEO_INFO, MSG_VIEW, PROTOCOL_VERSION, ROLE_AUDIO, ROLE_CONTROL, ROLE_FILE, ROLE_VIDEO, AuthError, ProtocolError,
                         pack_echo, pack_frame, pack_frame2, pack_move, pack_update, parse_version,
                         recv_exact, server_handshake, tune_socket, unpack_echo, unpack_move)
+from ..geometry import OPPOSITE
 from .router import Router
 
 log = logging.getLogger("mirrorway.server")
@@ -53,6 +56,7 @@ class ControlSession:
         self.last_update_result: Optional[dict] = None
         self.wol_learned = False
         self.device: Optional[dict] = None        # its record, if it connected with a device key
+        self.secure = False                       # Windows' lock screen helper (ROLE_SECURE), not the app
         self._q: "queue.Queue" = queue.Queue()
         self._close_lock = threading.Lock()
         self._clip_rx = RC.Assembler()
@@ -160,6 +164,8 @@ class ControlSession:
                     self.server.action_from_windows(json.loads(payload.decode("utf-8")))
                 elif mtype == MSG_LOCKED:
                     self.server.windows_lock_changed(json.loads(payload.decode("utf-8")))
+                elif mtype == MSG_SECURE_STATE and self.secure:
+                    self.server.secure_state(self, json.loads(payload.decode("utf-8")))
                 elif mtype == MSG_HELLO:
                     upd = json.loads(payload.decode("utf-8"))
                     self.hello.update(upd)
@@ -178,7 +184,10 @@ class ControlSession:
             self.closed = True
         self._q.put((None, b""))
         self.ch.close()
-        self.server._on_control_closed(self)
+        if self.secure:
+            self.server._on_secure_closed(self)
+        else:
+            self.server._on_control_closed(self)
 
 
 # ---------------------------------------------------------------------------
@@ -979,6 +988,9 @@ class MirrorwayServer:
         self._vt_block_until = 0.0             # after a temporary failure, the software encoder until this time
         self.capture_nv12 = True               # capture the screen as NV12 on the hardware H.264 path
         self.lock_mac: Optional[Callable[[], object]] = None    # locks the Mac (set by the app; "Lock both computers")
+        self.secure: Optional[ControlSession] = None    # Windows' lock screen helper (lock screen support installed)
+        self.secure_desktop = False            # Windows shows its lock screen / Ctrl+Alt+Del / UAC prompt now
+        self.secure_desktop_name = ""
         self._asked_windows_lock = -1e9        # when the Mac asked Windows to lock (its "locked" reply is not echoed)
         self._locked_for_windows = -1e9        # when Windows' lock locked the Mac (the Mac's lock is not echoed)
         self.control: Optional[ControlSession] = None
@@ -1009,15 +1021,80 @@ class MirrorwayServer:
         c = self.control
         return c is not None and not c.closed
 
+    INPUT_TYPES = frozenset((MSG_MOVE, MSG_KEY, MSG_BUTTON, MSG_SCROLL, MSG_TEXT, MSG_ENTER, MSG_EXIT,
+                             MSG_RELEASE_ALL, MSG_GESTURE))
+
+    def _target(self, mtype: int):
+        """Keyboard and mouse go to the lock screen helper while Windows shows a secure desktop."""
+        if mtype in self.INPUT_TYPES and self.secure_desktop:
+            s = self.secure
+            if s is not None and not s.closed:
+                return s
+        return self.control
+
     def send(self, mtype: int, payload: bytes = b"") -> None:
-        c = self.control
+        c = self._target(mtype)
         if c is not None:
             c.send(mtype, payload)
 
     def send_json(self, mtype: int, obj) -> None:
-        c = self.control
+        c = self._target(mtype)
         if c is not None:
             c.send_json(mtype, obj)
+
+    # ---- Windows' lock screen (lock screen support: the helper's own connection) -----------------------------
+    def input_ready(self) -> bool:
+        """The keyboard and mouse can go to Windows: the app is connected, or the lock screen helper is while Windows
+        shows a secure desktop (the sign-in screen after a restart, before anyone has logged on)."""
+        return self.connected() or (self.secure_connected() and self.secure_desktop)
+
+    def secure_connected(self) -> bool:
+        s = self.secure
+        return s is not None and not s.closed
+
+    def secure_state(self, sess: ControlSession, info: dict) -> None:
+        """The helper reports the input desktop. Switching between the app and the helper while Windows is being
+        controlled: the one that had the keyboard lets go (EXIT), the other one takes it where the pointer is."""
+        if sess is not self.secure:
+            return
+        on = bool(info.get("secure"))
+        self.secure_desktop_name = str(info.get("desktop") or "")
+        if on == self.secure_desktop:
+            return
+        with self.router.lock:
+            remote = self.router.remote
+            if remote:
+                self.send(MSG_EXIT)                       # to the one that had it
+            self.secure_desktop = on
+            if remote:
+                self.send_json(MSG_ENTER, {"from": "center", "ratio": 0.5, "exit": OPPOSITE.get(self.router.side,
+                                                                                              "left")})
+        log.info("Windows %s (%s)", "shows a secure desktop: input goes to the lock screen helper" if on
+                 else "is back on the user's desktop", self.secure_desktop_name or "?")
+        self._notify()
+
+    def send_sas(self) -> bool:
+        """Ctrl+Alt+Del on Windows (⌃⌥⌫); needs lock screen support on Windows."""
+        s = self.secure
+        if s is None or s.closed:
+            log.info("Ctrl+Alt+Del: lock screen support is not installed (or not connected) on Windows")
+            return False
+        s.send(MSG_SAS)
+        log.info("Ctrl+Alt+Del sent to Windows")
+        return True
+
+    def _on_secure_closed(self, sess: ControlSession) -> None:
+        with self._lock:
+            if self.secure is not sess:
+                return
+            self.secure = None
+            was = self.secure_desktop
+            self.secure_desktop = False
+        log.info("Windows lock screen helper disconnected")
+        if was and self.router.remote:
+            self.send_json(MSG_ENTER, {"from": "center", "ratio": 0.5,
+                                       "exit": OPPOSITE.get(self.router.side, "left")})
+        self._notify()
 
     def _send_now(self, mtype: int, payload: bytes) -> None:
         c = self.control
@@ -1372,7 +1449,7 @@ class MirrorwayServer:
                 if role == ROLE_PAIR:
                     self._handle_pairing(conn, addr)
                     return
-                if role not in (ROLE_CONTROL, ROLE_VIDEO, ROLE_FILE, ROLE_AUDIO) or self.identity is None:
+                if role not in (ROLE_CONTROL, ROLE_VIDEO, ROLE_FILE, ROLE_AUDIO, ROLE_SECURE) or self.identity is None:
                     raise ProtocolError("invalid role or no Mac identity")
                 ch, hello, pub = server_accept(conn, self.identity, role, self.is_known)
                 device = self.device_by_pub(pub)
@@ -1414,6 +1491,23 @@ class MirrorwayServer:
             self._device_seen(device)
         if ch.role == ROLE_FILE:
             threading.Thread(target=self._file_session, args=(ch,), daemon=True, name="mirrorway-files").start()
+            return
+        if ch.role == ROLE_SECURE:
+            if device is None:
+                ch.close()
+                return
+            sess = ControlSession(self, ch, hello, addr)
+            sess.secure = True
+            sess.device = device
+            with self._lock:
+                old, self.secure = self.secure, sess
+                self.secure_desktop = False
+            if old is not None:
+                old.close()
+            sess.start()
+            log.info("Windows lock screen helper connected: %s (%s), version %s", sess.name, addr[0],
+                     sess.client_version)
+            self._notify()
             return
         if ch.role == ROLE_AUDIO:
             asess = AudioSession(self, ch, addr)
@@ -1814,9 +1908,11 @@ class MirrorwayServer:
         log.info("Windows was %s", "locked" if locked else "unlocked")
         if not locked:
             return
+        locking_mac = self.lock_sync() and self.lock_mac is not None and \
+            time.monotonic() - self._asked_windows_lock >= self.LOCK_ECHO_S
         try:
-            if self.router.remote:
-                self.router.leave_to_mac()
+            if self.router.remote and (locking_mac or not self.secure_connected()):
+                self.router.leave_to_mac()            # without lock screen support Windows' lock screen is unreachable
         except Exception:
             log.exception("could not take the keyboard and mouse back")
         if not self.lock_sync() or self.lock_mac is None:

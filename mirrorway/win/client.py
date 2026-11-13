@@ -372,6 +372,8 @@ class ControlClient(threading.Thread):
             self.auth_mode = mode
             self._server_features = list(server_hello.get("features") or [])
             self.file_target = (host, port)
+            if self.cfg.get("last_mac_host") != host:
+                self.cfg.set("last_mac_host", host)       # where the lock screen helper finds the Mac
             self._clip_rx = RC.Assembler()
             sock.settimeout(15)
             self.ch = ch

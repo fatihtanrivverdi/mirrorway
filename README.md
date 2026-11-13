@@ -182,6 +182,15 @@ With **Mirrorway › Audio › Play the Mac's Sound on Windows**, everything tha
 - **Only some apps:** in Settings › Audio, **Send the sound of › Only the apps below** and switch on the apps (for example Spotify or a browser); the others are not sent. Apps that start later are picked up within a few seconds. With **Mute the Mac's speakers** on, the other apps are silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both computers).
 - The **Status** line shows whether the transfer is working, or why not. The Mac log gets one line a minute: packets, the level while sound played and how much of the minute had sound, the loudest moment, Windows's queue, and the dropouts and trims of that minute.
 
+### Windows's lock screen, Ctrl+Alt+Del and UAC prompts (lock screen support)
+
+Windows shows its lock screen, the sign-in screen, the Ctrl+Alt+Del screen and UAC prompts on a separate *secure desktop* that normal programs cannot type on. **Lock screen support** lets the Mac's keyboard and mouse work there too:
+
+- Install it on Windows in **Settings › General › Lock screen › Install…** (Windows asks for administrator permission once). It uses this PC's existing pairing with the Mac; remove it there with **Remove…** (uninstalling Mirrorway removes it too).
+- Then type your Windows password on the lock screen with the Mac's keyboard, also on the sign-in screen after a restart, and answer UAC prompts with the Mac's mouse. **`⌃⌥⌫`** on the Mac sends **Ctrl+Alt+Del** to Windows.
+- How it works: a small Windows service (`MirrorwaySecure`, running as SYSTEM) keeps a helper running in the signed-in session. The helper connects to the Mac by itself with this PC's device key and only accepts the paired Mac (checked with the Mac's key), so no program on the PC can make it type, and it cannot be used to approve UAC prompts. Its files live under `C:\Program Files\Mirrorway`, where only administrators can change them; the key it uses is readable only by SYSTEM and administrators. To send Ctrl+Alt+Del, Windows's "software Secure Attention Sequence" policy is set to allow services (as Chrome Remote Desktop does); removing lock screen support restores the previous setting.
+- Mirrorway's in-app updates do not change the service; when a new version needs it, Settings shows **Update…**.
+
 ### A Windows monitor as the Mac's second screen (experimental)
 
 Choose a Windows monitor in **Mirrorway › Second Screen (Windows monitor)**. The Mac opens a virtual display with that monitor's resolution, and the screen window on Windows goes full screen on that monitor to show it. You can drag windows there; the Mac's pointer and keyboard work there directly.
@@ -252,7 +261,7 @@ When something goes wrong, **Mirrorway › Create Diagnostics Bundle** (also in 
 
 ## 6. Limitations
 
-- Windows's lock screen, Ctrl+Alt+Del and UAC prompts run on the secure desktop; remote input cannot reach them.
+- Without lock screen support (see above), Windows's lock screen, Ctrl+Alt+Del and UAC prompts take only the PC's own keyboard and mouse: they run on a secure desktop normal programs cannot type on.
 - Files move by copy and paste; there is no drag and drop between the computers.
 - Sound only goes from the Mac to Windows; Windows's sound and microphones are not transferred.
 - Screen sharing is view only: Windows does not control the Mac (you already use the Mac's keyboard and mouse).

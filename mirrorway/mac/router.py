@@ -194,7 +194,7 @@ class Router:
         if not self.remote:
             if (ev.kind == "move" and self.settings.get("edge_switch")
                     and self.clock() - self.last_switch > SWITCH_COOLDOWN
-                    and self.sink.connected()):
+                    and self._can_enter()):
                 displays = self.platform.displays()
                 hit = self._vd_exit(displays, ev)
                 if hit is not None:
@@ -359,12 +359,16 @@ class Router:
                 return "to_mac"
         return None
 
+    KEY_DELETE = 51                       # ⌃⌥⌫: Ctrl+Alt+Del on Windows (with lock screen support)
+
     def _quick_action(self, ev: InputEvent) -> Optional[str]:
         f = ev.flags
         if self.on_action is None or not (f & FLAG_CONTROL) or not (f & FLAG_OPTION):
             return None
         if f & (FLAG_COMMAND | FLAG_SHIFT):
             return None
+        if ev.keycode == self.KEY_DELETE:
+            return "sas"
         return self.action_keys.get(ev.keycode)
 
     def _iso(self, ev: InputEvent) -> Optional[bool]:
@@ -381,7 +385,7 @@ class Router:
             if self.remote:
                 self.swallowed.add(kc)
                 return SUPPRESS
-            if self.sink.connected():
+            if self._can_enter():
                 self._enter("center", 0.5)
                 self.swallowed.add(kc)
                 return SUPPRESS
@@ -619,6 +623,12 @@ class Router:
             except Exception:
                 log.exception("switch ring")
 
+    def _can_enter(self) -> bool:
+        """Windows takes input: the app is connected, or (at Windows' sign-in or lock screen, before the app runs)
+        the lock screen helper is."""
+        ready = getattr(self.sink, "input_ready", None)
+        return bool(ready()) if ready is not None else bool(self.sink.connected())
+
     def _home_point(self, displays) -> Optional[Tuple[float, float]]:
         """The pointer's place before control went to Windows, a little inside its display (so it does not sit on the
         edge it may have left through); None if that display is gone."""
@@ -635,7 +645,7 @@ class Router:
     # ---- called from outside ----------------------------------------------
     def enter_center(self) -> bool:
         with self.lock:
-            if self.remote or not self.sink.connected():
+            if self.remote or not self._can_enter():
                 return False
             self._enter("center", 0.5)
             return True

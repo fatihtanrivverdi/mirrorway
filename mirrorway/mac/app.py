@@ -781,7 +781,9 @@ class MirrorwayMacApp(rumps.App):
     def quick_action(self, action: str) -> None:
         log.info("Quick shortcut: %s", action)
         try:
-            if action == "panel":
+            if action == "sas":
+                self.server.send_sas()
+            elif action == "panel":
                 self.toggle_panel()
             else:
                 self.panel_action("tile:" + action)

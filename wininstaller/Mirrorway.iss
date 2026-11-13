@@ -146,8 +146,20 @@ begin
     AddFirewallRule();
 end;
 
+procedure RemoveLockScreenSupport();
+var
+  Code: Integer;
+begin
+  { Lock screen support is a service (installed from Mirrorway's Settings with administrator permission): it goes
+    too, with one administrator prompt }
+  if RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\MirrorwaySecure') then
+    ShellExec('runas', ExpandConstant('{app}\python\python.exe'), '-m mirrorway.win.svcinstall uninstall',
+              ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   StopMirrorway();
+  RemoveLockScreenSupport();
   Result := True;
 end;

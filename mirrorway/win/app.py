@@ -1,6 +1,7 @@
 """The Windows app: tray icon, settings window, screen viewer."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import queue
@@ -9,6 +10,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 
 from PIL import Image, ImageDraw
 
@@ -92,6 +94,7 @@ class WinApp:
         self.panel = None
         self.hotkeys = None
         self._reconnect_until = 0.0
+        self._lockscreen_busy_until = 0.0
 
         self.discovery = Listener()
         self.discovery.start()
@@ -487,8 +490,45 @@ class WinApp:
                "paired": creds.paired(), "fingerprint": fp, "found": found_text,
                "audio_supported": c.can_ask_mac(), "audio_on": c.audio_on,
                "startup": {"available": startup.available(), "enabled": startup.is_enabled()},
+               "lockscreen": self.lockscreen_state(),
                "version": __version__}
         return prefs.win_pages(self.cfg, ctx)
+
+    # ---- lock screen support (a service, installed with administrator permission) -------------------------------
+    def lockscreen_state(self) -> dict:
+        from .svcinstall import status
+        st = status()
+        st["busy"] = time.monotonic() < self._lockscreen_busy_until
+        try:
+            res = json.loads((CONFIG_DIR / "lockscreen-result.json").read_text("utf-8"))
+            if time.time() - float(res.get("time") or 0) < 600 and not res.get("ok"):
+                st["error"] = str(res.get("error") or "")
+        except Exception:
+            pass
+        from .lockscreen import SERVICE_PROTOCOL
+        installed = bool(st.get("installed"))
+        st["outdated"] = installed and int(st.get("protocol") or 0) < SERVICE_PROTOCOL     # must be updated
+        st["older"] = installed and bool(st.get("version")) and st["version"] != __version__   # may be updated
+        return st
+
+    def lockscreen_action(self, action: str) -> bool:
+        """Installs or removes lock screen support: starts the installer with administrator permission (UAC)."""
+        if sys.platform != "win32":
+            return False
+        import ctypes
+        py = Path(sys.executable)
+        pyw = py.with_name("pythonw.exe")
+        exe = pyw if pyw.exists() else py
+        cfg_path = getattr(self.cfg, "path", CONFIG_DIR / "win.json")
+        params = f'-m mirrorway.win.svcinstall {action} --config "{cfg_path}"'
+        root = str(self.control.install_root)
+        r = ctypes.windll.shell32.ShellExecuteW(None, "runas", str(exe), params, root, 0)
+        if int(r) <= 32:
+            log.info("Lock screen support: the %s was not started (%s)", action, r)
+            return False
+        log.info("Lock screen support: %s started (administrator permission)", action)
+        self._lockscreen_busy_until = time.monotonic() + 60
+        return True
 
     _BOOL_SETTINGS = ("clipboard", "file_clipboard", "open_viewer_on_start", "hw_decode", "overlay_fullscreen",
                       "overlay_window", "overlay_extend", "quick_panel", "switch_ring")
@@ -532,6 +572,8 @@ class WinApp:
                     os.startfile(str(CONFIG_DIR))
             elif key == "action:diag":
                 self.make_diag()
+            elif key in ("action:lockscreen_install", "action:lockscreen_remove"):
+                self.lockscreen_action("install" if key.endswith("install") else "uninstall")
             else:
                 log.warning("Unknown setting: %s", key)
                 return

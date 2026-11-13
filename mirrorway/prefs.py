@@ -120,6 +120,8 @@ def _general(cfg, ctx) -> Page:
         Item("popup", "shortcut:second", T("Second screen on or off"), keys["second"], letters),
         Item("popup", "shortcut:audio", T("Audio on Windows on or off"), keys["audio"], letters),
         Item("popup", "shortcut:panel", T("Open the Mirrorway panel"), keys["panel"], letters),
+        Item("keys", "keys:sas", T("Ctrl+Alt+Del on Windows"), "⌃⌥⌫",
+             detail=T("Needs lock screen support on Windows (its Settings › General)")),
     ]
     perm_ok = ctx.get("permission", True)
     perms = [Item("button", "action:perm:" + k, label, button=T("Open…")) for k, label in
@@ -406,5 +408,38 @@ def win_pages(cfg, ctx: Optional[dict] = None) -> List[Page]:
         Page("audio", T("Audio"), "", "#D9485F", [Group("", audio)]),
         Page("clipboard", T("Clipboard and files"), "", "#0F8F80", [Group("", clip)]),
         Page("shortcuts", T("Shortcuts"), "", "#3B6FD8", [Group("", shortcuts)]),
-        Page("general", T("General"), "", "#6B6B70", [Group("", general)]),
+        Page("general", T("General"), "", "#6B6B70", [Group("", general), _lockscreen_group(ctx)]),
     ]
+
+
+def _lockscreen_group(ctx) -> Group:
+    """Lock screen support (Windows): a service, installed with administrator permission."""
+    ls = ctx.get("lockscreen") or {}
+    installed, running, busy = bool(ls.get("installed")), bool(ls.get("running")), bool(ls.get("busy"))
+    if ls.get("error") and not installed:
+        state = T("Could not install: {error}").format(error=ls["error"])
+    elif installed and ls.get("outdated"):
+        state = T("Version {version} is installed; update it to match this Mirrorway").format(
+            version=ls.get("version") or "?")
+    elif installed and running:
+        state = T("On: the Mac's keyboard and mouse work on the lock screen, Ctrl+Alt+Del (⌃⌥⌫ on the Mac) "
+                  "and UAC prompts")
+        if ls.get("older"):
+            state += " · " + T("version {version}").format(version=ls.get("version") or "?")
+    elif installed:
+        state = T("Installed, but the service is not running")
+    elif busy:
+        state = T("Installing… confirm the Windows prompt")
+    else:
+        state = T("Off: the lock screen and UAC prompts take only this PC's own keyboard and mouse")
+    items = [Item("text", "lockscreen_state", T("Status"), detail=state)]
+    if not installed or ls.get("outdated") or ls.get("older"):
+        items.append(Item("button", "action:lockscreen_install",
+                          T("Update lock screen support") if installed else T("Install lock screen support"),
+                          detail=T("Asks for administrator permission once; uses this PC's pairing with the Mac"),
+                          button=T("Update…") if installed else T("Install…"),
+                          enabled=bool(ctx.get("paired")) and not busy))
+    if installed:
+        items.append(Item("button", "action:lockscreen_remove", T("Remove lock screen support"),
+                          button=T("Remove…"), enabled=not busy))
+    return Group(T("Lock screen"), items)

@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.3.0 — the Mac's keyboard on Windows' lock screen, Ctrl+Alt+Del and UAC prompts
+- **Lock screen support** (Windows Settings › General › Lock screen › Install…, one administrator prompt): type
+  your Windows password on the lock screen and the sign-in screen after a restart with the Mac's keyboard, answer
+  UAC prompts with the Mac's mouse, and send **Ctrl+Alt+Del with ⌃⌥⌫** on the Mac.
+- A Windows service (MirrorwaySecure, LocalSystem) keeps a helper running as SYSTEM in the session at the console.
+  The helper connects to the Mac on its own with this PC's device key, verifies the Mac's key, and reports which
+  desktop Windows shows; while it is a secure desktop the Mac sends the keyboard and mouse to the helper, which types
+  from a thread attached to that desktop. Nothing on the PC can make it type, so it cannot approve UAC prompts for
+  another program. Ctrl+Alt+Del goes through the service (SendSAS); the "software SAS" policy is set to allow
+  services and restored on removal.
+- Its files are under Program Files (only administrators can change them; the in-app update leaves them alone) and
+  its key is readable only by SYSTEM and administrators. Removing it (Settings, or uninstalling Mirrorway) removes
+  the service, the files and the policy change.
+- When Windows locks while you control it, control now stays on Windows if lock screen support is installed (you can
+  type the password); without it, or when the Mac locks too, it comes back to the Mac as before.
+- CI installs lock screen support on a real Windows runner, checks the helper connects as SYSTEM and reports the
+  desktop, opens the Ctrl+Alt+Del screen and closes it with Escape typed by the helper, then removes everything.
+
 ## 3.2.4 — the pointer keeps its place; audio from chosen apps
 - **Fix: the pointer landed somewhere else after every switch.** With several Windows monitors side by side, the
   way back measured the position along one monitor while the way in measured it along all of them, so going down
