@@ -82,6 +82,8 @@ WIN_DEFAULTS = {
     "quick_panel": True,        # clicking the tray icon opens the panel (False: the screen window, as before 3.1.2)
     "switch_ring": True,        # a ring where the Mac's pointer arrives, for half a second
     "audio_muted_by_app": False,  # 3.4: Mirrorway muted the speakers while Windows' sound played on the Mac
+    "guest": True,              # 3.6: this PC's keyboard and mouse can go to the Mac (edge, Ctrl+Alt+arrow)
+    "guest_cursor_hidden": False,  # the pointer was hidden while they were on the Mac (restored at the next start)
     "shortcuts": {"screen": "s"},   # Control + Alt + letter: show or hide the Mac's screen
 }
 

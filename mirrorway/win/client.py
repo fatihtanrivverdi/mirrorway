@@ -17,6 +17,7 @@ from typing import Callable, Optional, Tuple
 from .. import __version__
 from .. import audio as AU
 from .. import filexfer as FX
+from .. import guest as GU
 from .. import richclip as RC
 from ..extend import FEATURE as EXTEND_FEATURE
 from ..gestures import FEATURE as GESTURES_FEATURE
@@ -178,7 +179,7 @@ class ControlClient(threading.Thread):
                  files_dir=None, on_notify: Optional[Callable[[str, str], None]] = None,
                  audio_player_factory: Optional[Callable] = None, lock_fn: Optional[Callable[[], object]] = None,
                  audio_capture_factory: Optional[Callable] = None, speakers=None,
-                 scales_fn: Optional[Callable] = None):
+                 scales_fn: Optional[Callable] = None, guest=None):
         super().__init__(daemon=True, name="mirrorway-control")
         self.on_view = on_view                 # the Mac asked for its screen window to open (second screen)
         self.lock_fn = lock_fn                 # locks Windows (the Mac locked, with "Lock both computers together")
@@ -204,6 +205,8 @@ class ControlClient(threading.Thread):
         self.on_status = on_status or (lambda state, text: None)
         self.monitors_fn = monitors_fn or (lambda: [])
         self.scales_fn = scales_fn             # monitors -> their display scales (3.5: the Mac's arrangement)
+        self.guest = guest                     # 3.6: this PC's keyboard and mouse on the Mac (win.guest.WinGuest)
+        self.on_guest_config: Optional[Callable[[], None]] = None
         self.ch = None
         self.server_name = ""
         self.server_version = ""
@@ -388,6 +391,7 @@ class ControlClient(threading.Thread):
                          "features": ["echo", "text", "devkeys", RC.FEATURE, EXTEND_FEATURE, GESTURES_FEATURE,
                                       FX.FEATURE] + ([AU.FEATURE] if self.audio is not None else [])
                                      + ([AU.WINAUDIO_FEATURE] if self.winaudio is not None else [])
+                                     + ([GU.GUEST_FEATURE] if self.guest is not None else [])
                                      + ([LOCK_FEATURE] if self.lock_fn is not None else [])}
                 ch, server_hello, mode = open_channel(self.creds, sock, ROLE_CONTROL, hello)
             except Exception as exc:
@@ -445,6 +449,8 @@ class ControlClient(threading.Thread):
                     self.audio.stop()
                 if self.winaudio is not None:
                     self.winaudio.stop()
+                if self.guest is not None:
+                    self.guest.on_disconnect()
             if not self._stop_evt.is_set():
                 self._set("disconnected", T("Connection dropped, retrying…"))
                 self._wait(2)
@@ -571,7 +577,21 @@ class ControlClient(threading.Thread):
             elif mtype == MSG_SCROLL:
                 r.on_scroll(*unpack_scroll(payload))
             elif mtype == MSG_ENTER:
+                if self.guest is not None:
+                    self.guest.on_mac_enter()          # the Mac's devices arrive: this PC's come home first
                 r.on_enter(json.loads(payload.decode("utf-8")))
+            elif mtype == GU.MSG_G_STATE:
+                if self.guest is not None:
+                    self.guest.on_state(json.loads(payload.decode("utf-8")))
+            elif mtype == GU.MSG_G_EXIT:
+                if self.guest is not None:
+                    self.guest.on_exit(json.loads(payload.decode("utf-8")))
+            elif mtype == GU.MSG_G_CONFIG:
+                if self.guest is not None:
+                    info = json.loads(payload.decode("utf-8"))
+                    self.guest.configure(info.get("edge"), info.get("span"))
+                    if self.on_guest_config is not None:
+                        self.on_guest_config()
             elif mtype == MSG_EXIT:
                 r.on_exit()
             elif mtype == AU.MSG_AUDIO_STATE:

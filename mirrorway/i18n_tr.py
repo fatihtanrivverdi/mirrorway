@@ -1041,8 +1041,18 @@ TR = {
         "Kenarın tamamı",
     "Until then the Mac's edge on the side in General leads to the whole of Windows' edge.":
         "O zamana kadar Mac'in Genel'de seçilen kenarı Windows'un kenarının tamamına açılır.",
-    "The pointer crosses straight where the screens face each other; the rest of the edge is a wall.":
-        "İmleç ekranların karşılıklı durduğu yerden düz geçer; kenarın geri kalanı duvardır.",
+    "It crosses where the screens face each other; elsewhere the edge is a wall.":
+        "İmleç ekranların karşılıklı olduğu yerden geçer; kenarın gerisi duvardır.",
     "The Mac's edge leads to the whole of Windows' edge, in proportion.":
         "Mac'in kenarı Windows'un kenarının tamamına orantılı olarak açılır.",
+    "Mirrorway on the Mac needs the Accessibility permission":
+        "Mac'teki Mirrorway'in Erişilebilirlik izni gerekiyor",
+    "On this PC":
+        "Bu bilgisayarda",
+    "Use this PC's keyboard and mouse on the Mac":
+        "Bu bilgisayarın klavye ve faresi Mac'te de kullanılsın",
+    "Ctrl+Alt + the arrow towards the Mac takes this keyboard and mouse there; the other arrow brings them back":
+        "Ctrl+Alt + Mac yönündeki ok bu klavye ve fareyi Mac'e geçirir; ters ok geri getirir",
+    "Push the pointer past the edge towards the Mac, or Ctrl+Alt + arrow":
+        "İmleci Mac tarafındaki kenara itin ya da Ctrl+Alt + ok",
 }

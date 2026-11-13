@@ -513,6 +513,33 @@ def arrangement_view():
             f"(1920 px at 125 %), dropped: {saved}")
 
 
+def guest_posting():
+    """Windows's keyboard and mouse on the Mac (3.6): events are created and marked so Mirrorway's own tap lets them
+    through; posting a move is tried (the runner may lack the Accessibility permission: then only reported)."""
+    import time
+
+    import Quartz
+    from mirrorway.guest import GUEST_MARK
+    from mirrorway.mac.inject import QuartzPoster, is_guest_event
+    p = QuartzPoster()
+    ev = Quartz.CGEventCreateKeyboardEvent(p.source, 0, True)
+    Quartz.CGEventSetIntegerValueField(ev, Quartz.kCGEventSourceUserData, GUEST_MARK)
+    assert is_guest_event(ev), "the mark does not survive"
+    assert not is_guest_event(Quartz.CGEventCreateKeyboardEvent(p.source, 0, True))
+    x0, y0 = p.cursor_pos()
+    main = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+    tx, ty = main.origin.x + main.size.width * 0.3, main.origin.y + main.size.height * 0.4
+    p.move(tx, ty, tx - x0, ty - y0, None)
+    time.sleep(0.2)
+    x1, y1 = p.cursor_pos()
+    moved = abs(x1 - tx) < 2 and abs(y1 - ty) < 2
+    p.flags_changed(56, 0x20002)                       # left Shift down, then up: harmless
+    p.flags_changed(56, 0)
+    p.scroll(0, 0)
+    return (f"the mark round-trips; posting a move {'moved' if moved else 'did NOT move'} the pointer "
+            f"({x0:.0f},{y0:.0f} -> {x1:.0f},{y1:.0f}, wanted {tx:.0f},{ty:.0f})")
+
+
 def switch_ring():
     """The switch ring: a borderless, click-through window centred on the point (global coordinates, origin top
     left), the two ring layers animating; it goes away after the animation, and a new switch restarts it."""
@@ -658,6 +685,7 @@ check("Trackpad gesture events", gesture_events)
 check("File clipboard (NSPasteboard file URLs)", file_clipboard)
 check("Audio transfer parts", audio_parts)
 check("Windows' sound on the Mac (AudioQueue)", winaudio_player)
+check("Windows's keyboard and mouse on the Mac (posting, the tap's mark)", guest_posting)
 try:
     print(f"[INFO] Audio capture (ScreenCaptureKit): {audio_capture()}")
 except Exception as exc:  # noqa: BLE001  (CI may have no Screen Recording permission; tried on a real Mac)

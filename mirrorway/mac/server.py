@@ -13,6 +13,7 @@ from typing import Callable, Optional
 from .. import __version__
 from .. import audio as AU
 from .. import filexfer as FX
+from .. import guest as GU
 from .. import richclip as RC
 from ..i18n import T
 from ..clipsync import ClipboardSync
@@ -123,6 +124,8 @@ class ControlSession:
             self.ch.sock.settimeout(20)
             while not self.closed:
                 mtype, payload = self.ch.recv()
+                if self.server.guest_message(self, mtype, payload):
+                    continue                                   # Windows's own keyboard and mouse (3.6)
                 if mtype == MSG_LEAVE:
                     info = json.loads(payload.decode("utf-8"))
                     vd = info.get("vd")
@@ -171,6 +174,7 @@ class ControlSession:
                     self.hello.update(upd)
                     if "monitors" in upd and not self.secure:
                         self.server._win_monitors_from(self.hello)
+                        self.server.send_guest_config()
                     if "adapters" in upd:
                         self.server.learn_wol(self, upd)
         except Exception as exc:
@@ -1019,6 +1023,26 @@ def _default_audio_capture():
     return SCKAudioCapture()
 
 
+def _default_guest_poster():
+    import sys
+    if sys.platform != "darwin":
+        return None
+    try:
+        from .inject import QuartzPoster
+        return QuartzPoster()
+    except Exception as exc:
+        log.info("Windows's keyboard and mouse cannot be posted on the Mac: %s", exc)
+        return None
+
+
+def _accessibility() -> bool:
+    try:
+        from .tap import accessibility_trusted
+        return bool(accessibility_trusted(False))
+    except Exception:
+        return False
+
+
 def _default_winaudio_player(rate: int, channels: int):
     from .player import AudioQueuePlayer
     return AudioQueuePlayer(rate, channels)
@@ -1058,7 +1082,8 @@ class MirrorwayServer:
                  h264_encoder_factory: Optional[Callable] = None, network_probe: Optional[Callable] = None,
                  vd_factory: Optional[Callable] = None, files_dir=None,
                  audio_capture_factory: Optional[Callable] = None, volume=None,
-                 winaudio_player_factory: Optional[Callable] = None):
+                 winaudio_player_factory: Optional[Callable] = None, guest_poster=None,
+                 guest_trusted: Optional[Callable[[], bool]] = None):
         self.cfg = cfg
         self.platform = platform
         self.router = Router(platform, self, cfg)
@@ -1076,6 +1101,14 @@ class MirrorwayServer:
         self.volume = volume or _MacVolume()
         self.audio: Optional[AudioSession] = None
         self.audio_error = ""
+        from .guest import MacGuest
+        poster = guest_poster if guest_poster is not None else _default_guest_poster()
+        self.guest: Optional[MacGuest] = None             # Windows's own keyboard and mouse on the Mac (3.6)
+        if poster is not None:
+            self.guest = MacGuest(self.router, poster, self.send_json,
+                                  trusted=guest_trusted or (_accessibility if guest_poster is None else (lambda: True)))
+            self.guest.on_change = lambda active: self._notify()
+            self.router.on_enter_windows = self.guest.end_local
         self.winaudio_player_factory = winaudio_player_factory or _default_winaudio_player
         self.winaudio: Optional[WinAudioSession] = None     # Windows' sound playing here (3.4)
         self.winaudio_error = ""
@@ -1605,7 +1638,8 @@ class MirrorwayServer:
                 "name": machine_name(), "version": __version__, "protocol": PROTOCOL_VERSION,
                 "side": self.cfg.get("side"), "screen_share": bool(self.cfg.get("screen_share")),
                 "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, FX.FEATURE_PACK, AU.FEATURE,
-                             ACTIONS_FEATURE, LOCK_FEATURE, AU.WINAUDIO_FEATURE],
+                             ACTIONS_FEATURE, LOCK_FEATURE, AU.WINAUDIO_FEATURE]
+                            + ([GU.GUEST_FEATURE] if self.guest is not None else []),
                 "id": self.identity.fingerprint if self.identity else "",
             })
         except Exception:
@@ -1672,6 +1706,7 @@ class MirrorwayServer:
             self._update_auto_scale(sess)
             self.extend.remember_monitors()
             self.send_audio_state()
+            self.send_guest_config()
             self._offer_update(sess)
             threading.Thread(target=self._arp_fallback, args=(sess,), daemon=True, name="mirrorway-arp").start()
         elif ch.role == ROLE_VIDEO:
@@ -1819,6 +1854,8 @@ class MirrorwayServer:
             if self.control is not sess:
                 return
             self.control = None
+        if self.guest is not None:
+            self.guest.end_local()
         self.router.force_local()
         log.info("Windows disconnected")
         self._notify()
@@ -1932,6 +1969,45 @@ class MirrorwayServer:
         finally:
             ch.close()
             self._notify()
+
+    # ---- Windows's own keyboard and mouse on the Mac (3.6) ------------------------------------------------
+    def guest_message(self, sess: "ControlSession", mtype: int, payload: bytes) -> bool:
+        """A reverse-control message from Windows; False if it is not one."""
+        g = self.guest
+        if mtype < GU.MSG_G_ENTER or mtype > GU.MSG_G_LEAVE or sess.secure:
+            return False
+        if g is None:
+            return True
+        if mtype == GU.MSG_G_MOVE:
+            g.move(*GU.unpack_move(payload))
+        elif mtype == GU.MSG_G_KEY:
+            g.key(*GU.unpack_key(payload))
+        elif mtype == GU.MSG_G_BUTTON:
+            g.button(*GU.unpack_button(payload))
+        elif mtype == GU.MSG_G_SCROLL:
+            g.scroll(*GU.unpack_scroll(payload))
+        elif mtype == GU.MSG_G_ENTER:
+            info = json.loads(payload.decode("utf-8") or "{}")
+            ratio = info.get("ratio")
+            reply = g.enter(None if ratio is None else float(ratio))
+            sess.send_json(GU.MSG_G_STATE, reply)
+        elif mtype == GU.MSG_G_LEAVE:
+            g.leave()
+        return True
+
+    def send_guest_config(self) -> None:
+        """Tell Windows which of its edges faces the Mac and, with an arrangement, which part of it."""
+        if self.guest is None or not self.supports(GU.GUEST_FEATURE):
+            return
+        span = None
+        arr = self.router.arrangement()
+        if arr is not None:
+            sp = arr[1].win_span(arr[0])
+            span = [round(sp[0], 5), round(sp[1], 5)] if sp is not None else [1.0, 0.0]   # no overlap: never
+        try:
+            self.send_json(GU.MSG_G_CONFIG, {"edge": OPPOSITE[self.router.side], "span": span})
+        except Exception:
+            pass
 
     # ---- audio ---------------------------------------------------------------------------------
     def audio_enabled(self) -> bool:
@@ -2196,6 +2272,7 @@ class MirrorwayServer:
                       "from_windows": self.winaudio is not None and not self.winaudio.closed,
                       "from_windows_error": self.winaudio_error, "from_windows_supported": self.winaudio_supported()},
             "extend_supported": self.extend.supported(),
+            "guest": bool(self.guest is not None and self.guest.active),
         }
 
 

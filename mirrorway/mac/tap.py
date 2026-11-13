@@ -11,6 +11,7 @@ from typing import Dict, List, Optional
 import Quartz
 
 from .. import gestures as G
+from ..guest import GUEST_MARK
 from ..geometry import Rect
 from .router import PASS_AS_MOVE, SUPPRESS, InputEvent, Router
 
@@ -439,6 +440,8 @@ class EventTap(threading.Thread):
                 log.warning("The system disabled the event tap, reopening it")
                 Quartz.CGEventTapEnable(self.tap, True)
                 return event
+            if Quartz.CGEventGetIntegerValueField(event, Quartz.kCGEventSourceUserData) == GUEST_MARK:
+                return event                       # Windows's keyboard and mouse on the Mac (3.6): already routed
             ev = self._convert(int(etype), event)
             if ev is None:
                 return event

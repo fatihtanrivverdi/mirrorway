@@ -100,6 +100,7 @@ Change the letters or turn a shortcut off in **Settings › General › Quick sh
 
 - **At the screen edge:** by default Windows is assumed to be on the **right** of the Mac. Push the pointer against the right edge of the Mac's screen to move to Windows; push it against the left edge of the Windows screen to come back. Change the side with **Mirrorway › Windows Is on This Side of the Screen**.
 - **Screen arrangement** (Settings › Arrangement on the Mac, 3.5): drag Windows's monitors to where they stand next to the Mac on your desk, as in System Settings › Displays. They snap to the nearest side of the Mac (this also sets the side above). The pointer then crosses straight across, and only the part where the screens face each other leads across; the rest of the edge is a wall. Both are measured in the same units: Mac points, and Windows pixels divided by Windows's display scale. **Reset** goes back to the default: the Mac's edge leads to the whole of Windows's edge, in proportion. Choosing another side in the menu also goes back to the default. Windows needs Mirrorway 3.5 for its walls; an older Windows lets the pointer back from anywhere on its edge.
+- **Windows's own keyboard and mouse on the Mac** (3.6): push the pointer of the mouse connected to Windows past the edge of Windows that faces the Mac, or press **Ctrl+Alt + the arrow towards the Mac** on Windows. Its keyboard and mouse then work on the Mac (the same key mapping as the other way round: Ctrl = ⌘, Win = ⌃, Alt = ⌥, AltGr = right ⌥). Push back across the Mac's edge that faces Windows, or press **Ctrl+Alt + the other arrow**, to bring them home. Meanwhile Windows's pointer is hidden. They also come home when the Mac's own keyboard and mouse go to Windows, when Windows locks or when the connection drops; Ctrl+Alt+Del always stays on Windows. Turn it off in Windows Settings › General.
 - **Shortcut:** `⌃ Control + ⌥ Option + →` switches to Windows, `⌃ + ⌥ + ←` returns to the Mac. The arrows follow the side you chose.
 - **Lock both computers together** (Settings › General on the Mac, off by default): when the Mac locks, Windows locks too, and the other way round; unlock each as usual. Whenever one of them locks, the keyboard and mouse come back to the Mac.
 - After every switch a violet ring grows and fades for half a second where the pointer appears, on Windows and on the Mac, so you see at once which computer has it. Turn it off in Settings › General (on each computer separately).
@@ -284,7 +285,8 @@ When something goes wrong, **Mirrorway › Create Diagnostics Bundle** (also in 
 - Without lock screen support (see above), Windows's lock screen, Ctrl+Alt+Del and UAC prompts take only the PC's own keyboard and mouse: they run on a secure desktop normal programs cannot type on.
 - Files move by copy and paste; there is no drag and drop between the computers.
 - Sound goes one way at a time (all on Windows or all on the Mac); microphones are not transferred.
-- Screen sharing is view only: Windows does not control the Mac (you already use the Mac's keyboard and mouse).
+- Screen sharing is view only: clicking in the Mac's screen window on Windows does nothing; to work on the Mac with Windows's keyboard and mouse, push them across the edge (3.6, see "Switching").
+- Windows's media keys (volume, play) stay on Windows while its keyboard is on the Mac.
 - The second screen is a video stream: its content reaches Windows with the same delay as the mirrored screen (≈15–20 ms).
 - Both computers must be on the same local network.
 

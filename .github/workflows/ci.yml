@@ -136,6 +136,11 @@ jobs:
       - name: Small-file speed test
         if: ${{ !cancelled() }}
         run: python tests/ci_run.py --retry 1 "Small-file speed test" python tests/bench_files.py --min-ratio 1.0 --link 40
+      # This PC's keyboard and mouse on the Mac (3.6): raw input, the hotkey and the low-level hooks for real, with
+      # SendInput standing in for a mouse and keyboard
+      - name: Reverse control test (hooks)
+        if: ${{ !cancelled() }}
+        run: python tests/ci_run.py "Reverse control test" python tests/ci_guest_windows.py
       # Lock screen support: the service installed for real (administrator), its SYSTEM helper connects to a Mac
       # server on this machine, Ctrl+Alt+Del opens the secure desktop and Escape typed by the helper closes it
       - name: Lock screen service test

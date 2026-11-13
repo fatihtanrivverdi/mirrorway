@@ -29,7 +29,7 @@ def install_mac():
         kCGScrollWheelEventIsContinuous=88, kCGScrollWheelEventPointDeltaAxis1=96,
         kCGScrollWheelEventPointDeltaAxis2=97,
         kCGSessionEventTap=1, kCGHeadInsertEventTap=0, kCGEventTapOptionDefault=0,
-        kCFRunLoopDefaultMode="default", kCGEventSourceStateCombinedSessionState=0,
+        kCFRunLoopDefaultMode="default", kCGEventSourceStateCombinedSessionState=0, kCGEventSourceUserData=42,
     )
     for k, v in consts.items():
         setattr(Q, k, v)

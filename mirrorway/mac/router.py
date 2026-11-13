@@ -139,6 +139,7 @@ class Router:
         self.action_keys: Dict[int, str] = {}
         self.on_action: Optional[Callable[[str], None]] = None
         self.on_return: Optional[Callable[[float, float], None]] = None   # where the pointer came back (the ring)
+        self.on_enter_windows: Optional[Callable[[], None]] = None        # the Mac's devices go to Windows (3.6)
         self.reload_settings()
 
     # ---- settings ----------------------------------------------------------
@@ -224,11 +225,9 @@ class Router:
                     return PASS
                 ratio = self.edge_guard.check(displays, ev.x, ev.y, ev.dx, ev.dy, self.side)
                 if ratio is not None:
-                    arr = self.arrangement(displays)
-                    if arr is not None:
-                        ratio = arr[1].mac_to_win(arr[0], ratio)
-                        if ratio is None:
-                            return PASS                  # no Windows monitor faces this part of the edge: a wall
+                    ratio = self.windows_ratio(ratio, displays)
+                    if ratio is None:
+                        return PASS                      # no Windows monitor faces this part of the edge: a wall
                     self._enter(OPPOSITE[self.side], ratio, pos=(ev.x, ev.y))
             return PASS
         # Movement comes from the change in position rather than the events' delta field: after warping the
@@ -561,6 +560,11 @@ class Router:
     # ---- mode switches ------------------------------------------------------
     def _enter(self, from_side: str, ratio: float, pos: Optional[Tuple[float, float]] = None,
                win_pos: Optional[Tuple[float, float]] = None) -> None:
+        if self.on_enter_windows is not None:              # Windows's own devices come home (3.6)
+            try:
+                self.on_enter_windows()
+            except Exception:
+                log.exception("guest end")
         main = self.platform.main_display()
         self.park = (main.x + main.w / 2.0, main.y + main.h / 2.0)
         self.remote = True
@@ -638,10 +642,7 @@ class Router:
                 main = self.platform.main_display()
                 pos = (main.x + main.w / 2.0, main.y + main.h / 2.0)
         else:
-            arr = self.arrangement(displays)
-            if arr is not None:
-                ratio = arr[1].win_to_mac(arr[0], ratio)
-            pos = entry_point(displays, self.side, ratio, inset=4)
+            pos = self.entry_from_windows(ratio, displays)
         try:
             self.platform.warp(*pos)
             self.platform.show_cursor()
@@ -673,6 +674,46 @@ class Router:
         inset = 4
         return (min(max(home[0], r.left + inset), r.right - 1 - inset),
                 min(max(home[1], r.top + inset), r.bottom - 1 - inset))
+
+    def entry_from_windows(self, ratio: float, displays=None) -> Tuple[float, float]:
+        """Where a pointer leaving Windows at `ratio` along its edge lands on the Mac (arrangement included)."""
+        displays = displays if displays is not None else self.platform.displays()
+        arr = self.arrangement(displays)
+        if arr is not None:
+            ratio = arr[1].win_to_mac(arr[0], ratio)
+        return entry_point(displays, self.side, ratio, inset=4)
+
+    def windows_ratio(self, mac_ratio: float, displays=None) -> Optional[float]:
+        """The ratio along Windows's edge for a Mac exit at `mac_ratio`; None where no Windows monitor faces it."""
+        arr = self.arrangement(displays)
+        if arr is None:
+            return mac_ratio
+        return arr[1].mac_to_win(arr[0], mac_ratio)
+
+    # ---- reverse control (3.6): Windows's own keyboard and mouse visit the Mac -------------------------------
+    def guest_arrives(self, ratio: Optional[float]) -> Tuple[float, float]:
+        """Windows's devices came over at `ratio` along Windows's edge (None: the hotkey). If the Mac's own were on
+        Windows, they come home first (the Mac's pointer is shown at the crossing point); otherwise the Mac's
+        pointer moves there. Returns where it is."""
+        with self.lock:
+            if self.remote:
+                self._leave(ratio, notify=True)
+                return self.platform.cursor_pos()
+            if ratio is None:
+                return self.platform.cursor_pos()
+            pos = self.entry_from_windows(ratio)
+            try:
+                self.platform.warp(*pos)
+            except Exception:
+                log.exception("could not move the pointer")
+            self.last_switch = self.clock()
+            self.edge_guard.reset(armed=False)
+        if self.on_return is not None:
+            try:
+                self.on_return(float(pos[0]), float(pos[1]))
+            except Exception:
+                log.exception("switch ring")
+        return pos
 
     # ---- called from outside ----------------------------------------------
     def enter_center(self) -> bool:

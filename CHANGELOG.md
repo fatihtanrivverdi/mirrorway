@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.6.0 — Windows's keyboard and mouse on the Mac
+- **Reverse control:** the mouse and keyboard connected to Windows can now be used on the Mac too. Push the pointer
+  past the edge of Windows that faces the Mac (the side from General, and with an arrangement only where the
+  screens face each other), or press **Ctrl+Alt + the arrow towards the Mac**; push it back across the Mac's edge
+  that faces Windows, or press **Ctrl+Alt + the other arrow**, to bring it home. On by default; Windows Settings ›
+  General › "Use this PC's keyboard and mouse on the Mac" turns it off.
+- Keys follow the same mapping as the other way round (Ctrl = ⌘, Win = ⌃, Alt = ⌥, AltGr = right ⌥, so @ € and the
+  like come out on a matching layout); double clicks, dragging, the wheel and side buttons work. The pointer moves
+  in the same proportion as the Mac's pointer does on Windows.
+- While Windows's keyboard and mouse are on the Mac, Windows's pointer is hidden and stays where it was; it comes
+  back where it left, or where it crossed the Mac's edge. They come home by themselves when the Mac's own keyboard
+  and mouse go to Windows, when Windows locks, when the connection drops, or when the Mac does not answer.
+  Ctrl+Alt+Del always stays on Windows.
+- How: on Windows, raw mouse input sees a push against the edge, low-level hooks capture the keyboard and mouse
+  only while they are on the Mac, and the system cursors are swapped for a blank one (restored at the next start
+  if Mirrorway stopped in between). The Mac posts the input as its own (this uses the Accessibility permission
+  Mirrorway already has) and marks it so its own event tap lets it through.
+- Settings › Arrangement: the explanation under "Real position" no longer gets cut off, and the picture is larger.
+- CI: the Windows hooks, raw input and hotkey run for real on the Windows runner with SendInput standing in for a
+  mouse and keyboard; the macOS job posts a move and checks the tap's mark.
+
 ## 3.5.1 — screen arrangement, first release
 3.5.0 was not published: on the macOS runner the arrangement picture could not be created (pyobjc took its Python
 helper methods for Objective-C selectors), so Settings › Arrangement would not have opened. Fixed, and a test now

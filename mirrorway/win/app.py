@@ -138,6 +138,21 @@ class WinApp:
                                  files_fn=lambda paths: (self.control.files.upload(paths)
                                                          if self.control.files is not None else False))
 
+        # 3.6: this PC's own keyboard and mouse on the Mac
+        self.guest = None
+        self.guest_hooks = None
+        if sys.platform == "win32":
+            from .guest import OutBox, WinGuest
+            from .guest_hooks import GuestHooks, restore_cursors
+            if cfg.get("guest_cursor_hidden"):          # Mirrorway stopped while the pointer was on the Mac
+                restore_cursors()
+                cfg.set("guest_cursor_hidden", False)
+            self.guest_hooks = GuestHooks(winapi.monitors, cfg)
+            self.guest = WinGuest(self.guest_hooks, OutBox(lambda mt, p: self.control._send_raw(mt, p)),
+                                  enabled=lambda: bool(self.cfg.get("guest", True)))
+            self.guest_hooks.guest = self.guest
+            self.guest.listeners.append(lambda active, pos: self._post(self._on_guest, active, pos))
+
         self.creds = Credentials(cfg)
         self.control = ControlClient(cfg, self.resolver, self.remote, clipsync_factory=clip_factory,
                                      on_status=self._on_status, monitors_fn=winapi.monitors,
@@ -149,7 +164,10 @@ class WinApp:
                                      audio_capture_factory=_audio_capture_factory(),
                                      scales_fn=_monitor_scales if sys.platform == "win32" else None,
                                      on_notify=lambda title, msg: self._post(self._show_notification, title, msg),
-                                     lock_fn=winapi.lock_workstation if sys.platform == "win32" else None)
+                                     lock_fn=winapi.lock_workstation if sys.platform == "win32" else None,
+                                     guest=self.guest)
+        if self.guest_hooks is not None:
+            self.control.on_guest_config = self.guest_hooks.configure
         self.control.enable_log_forwarding()
         if self.control.winaudio is not None:          # Mirrorway stopped while it had muted the speakers
             try:
@@ -159,7 +177,18 @@ class WinApp:
         self.session = None
         if sys.platform == "win32":                      # Windows locked or unlocked: tell the Mac
             from .session import SessionWatcher
-            self.session = SessionWatcher(self.control.report_lock)
+            self.session = SessionWatcher(self._session_changed)
+
+    def _session_changed(self, locked: bool) -> None:
+        if locked and self.guest is not None:
+            self.guest.end(None, notify=True)            # the keyboard and mouse come home before the lock screen
+        self.control.report_lock(locked)
+
+    def _on_guest(self, active: bool, pos) -> None:
+        """This PC's keyboard and mouse went to the Mac or came back (UI thread)."""
+        if not active and pos is not None and self.ring is not None:
+            self.ring.show(int(pos[0]), int(pos[1]))
+        self._refresh_icon()
 
     # ---- UI queue (from other threads to Tk) -----------------------
     def _post(self, fn, *args) -> None:
@@ -557,7 +586,7 @@ class WinApp:
         return True
 
     _BOOL_SETTINGS = ("clipboard", "file_clipboard", "open_viewer_on_start", "hw_decode", "overlay_fullscreen",
-                      "overlay_window", "overlay_extend", "quick_panel", "switch_ring")
+                      "overlay_window", "overlay_extend", "quick_panel", "switch_ring", "guest")
 
     def apply_setting(self, key: str, value) -> None:
         """A change in the Settings window."""
@@ -566,6 +595,8 @@ class WinApp:
         try:
             if key in self._BOOL_SETTINGS:
                 self.cfg.set(key, bool(value))
+                if key == "guest" and not value and self.guest is not None:
+                    self.guest.end(None, notify=True)
             elif key == "viewer":
                 self.cfg.set("viewer", value)
             elif key == "language":
@@ -643,6 +674,8 @@ class WinApp:
             self.ring.start()                            # the window and the frames are ready before the first switch
         if self.session is not None:
             self.session.start()
+        if self.guest_hooks is not None:
+            self.guest_hooks.start()
         self.root.after(50, self._drain)
         if not (self.creds.paired() or self.creds.legacy_code()):
             self.root.after(300, self.open_settings)

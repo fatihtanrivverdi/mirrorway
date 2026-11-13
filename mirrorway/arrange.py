@@ -180,7 +180,7 @@ class Picture:
         """(scale, x0, y0): Mac points -> view points, everything centred with room for dragging."""
         u = union(rects)
         g = union(self.win)
-        u = Rect(u.x - g.w * 0.35, u.y - g.h * 0.35, u.w + g.w * 0.7, u.h + g.h * 0.7)
+        u = Rect(u.x - g.w * 0.2, u.y - g.h * 0.2, u.w + g.w * 0.4, u.h + g.h * 0.4)
         k = min((self.width - 2 * PAD) / max(u.w, 1), (self.height - 2 * PAD) / max(u.h, 1))
         x0 = (self.width - u.w * k) / 2 - u.x * k
         y0 = (self.height - u.h * k) / 2 - u.y * k

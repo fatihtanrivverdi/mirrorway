@@ -357,8 +357,7 @@ def _arrange(cfg, st, ctx) -> Page:
     picture = [Item("arrange", "layout", T("Drag Windows next to the Mac"), model)]
     state = [
         Item("text", "arrange_state", T("Real position") if placed else T("Whole edge"),
-             detail=T("The pointer crosses straight where the screens face each other; the rest of the edge is a "
-                      "wall.") if placed else
+             detail=T("It crosses where the screens face each other; elsewhere the edge is a wall.") if placed else
              T("The Mac's edge leads to the whole of Windows' edge, in proportion.")),
         Item("button", "action:layout_reset", T("Use the whole edge again"), button=T("Reset"), enabled=placed),
     ]
@@ -468,12 +467,17 @@ def win_pages(cfg, ctx: Optional[dict] = None) -> List[Page]:
         Item("text", "mac_keys", T("On the Mac"),
              detail=T("⌃⌥ + arrow switches between the computers; "
                       "⌃⌥S, ⌃⌥D, ⌃⌥A and ⌃⌥M work there")),
+        Item("text", "guest_keys", T("On this PC"),
+             detail=T("Ctrl+Alt + the arrow towards the Mac takes this keyboard and mouse there; the other arrow "
+                      "brings them back")),
     ]
     general = [
         Item("switch", "quick_panel", T("Clicking the tray icon opens the panel"), bool(cfg.get("quick_panel", True)),
              detail=T("Otherwise it opens the Mac's screen (after Mirrorway restarts)")),
         Item("switch", "switch_ring", T("Show a ring where the pointer appears"), bool(cfg.get("switch_ring", True)),
              detail=T("When the Mac's pointer arrives, for half a second")),
+        Item("switch", "guest", T("Use this PC's keyboard and mouse on the Mac"), bool(cfg.get("guest", True)),
+             detail=T("Push the pointer past the edge towards the Mac, or Ctrl+Alt + arrow")),
         Item("popup", "language", T("Language"), cfg.get("language") or "auto", languages(),
              detail=T("Used after Mirrorway restarts")),
         Item("button", "action:logs", T("Log files"), button=T("Open")),

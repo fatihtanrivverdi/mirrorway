@@ -409,6 +409,8 @@ class MirrorwayMacApp(rumps.App):
             self._check_group(group, value)
             if reload_router or key == "side":
                 self.server.router.reload_settings()
+            if key == "side":
+                self._bg(self.server.send_guest_config, "mirrorway-guest-config")
             if video:
                 self.server.restart_video()
             self._refresh_static()
@@ -1108,6 +1110,7 @@ class MirrorwayMacApp(rumps.App):
                 router.reload_settings()
                 self._check_group(self.side_items, value)
                 self._refresh_static()
+                self._bg(self.server.send_guest_config, "mirrorway-guest-config")
             elif key == "layout":                             # dragged in Settings › Arrangement
                 side = value.get("side") if isinstance(value, dict) else None
                 if side in ARROWS:
@@ -1117,6 +1120,7 @@ class MirrorwayMacApp(rumps.App):
                     self._check_group(self.side_items, side)
                     self._refresh_static()
                     log.info("Arrangement: Windows %s, offset %.0f pt", side, float(value.get("offset") or 0.0))
+                    self._bg(self.server.send_guest_config, "mirrorway-guest-config")
 
             elif key in ("speed", "scroll_speed"):
                 cfg.set(key, float(value))
@@ -1181,6 +1185,7 @@ class MirrorwayMacApp(rumps.App):
         if name == "layout_reset":
             self.cfg.set("layout", None)
             log.info("Arrangement: the whole edge again")
+            self._bg(self.server.send_guest_config, "mirrorway-guest-config")
         elif name.startswith("perm:"):
             _open(PRIVACY_URLS[name[len("perm:"):]])
         elif name.startswith("remove_device:"):

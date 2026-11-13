@@ -61,6 +61,10 @@ def test_mac_tap_conversion_and_callback():
         # a click and a key are suppressed
         assert cb(None, 1, E(), None) is None
         assert cb(None, 10, E({9: 0, 10: 40}), None) is None
+        # but not what Mirrorway posted for Windows's own keyboard (3.6): it is already routed
+        from mirrorway.guest import GUEST_MARK
+        ev_g = E({9: 0, 10: 40, 42: GUEST_MARK})
+        assert cb(None, 10, ev_g, None) is ev_g
         ev_k = tap._convert(10, E({9: 12, 10: 40}, text="@", flags=0x80020))
         assert ev_k.kind == "key_down" and ev_k.text == "@" and ev_k.keycode == 12
         assert cb(None, 11, E({9: 0, 10: 40}), None) is None
