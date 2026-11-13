@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.6.1 — Windows's keyboard and mouse on the Mac, first release
+3.6.0 was not published: the new Windows CI test stopped on an error of its own (it read the wrong message), after
+it had already shown that pushing past the edge reaches Mirrorway through raw input and starts the capture. The
+test is fixed; the app is the same as 3.6.0, described below. The macOS runner posted a move and the pointer went
+there.
+
 ## 3.6.0 — Windows's keyboard and mouse on the Mac
 - **Reverse control:** the mouse and keyboard connected to Windows can now be used on the Mac too. Push the pointer
   past the edge of Windows that faces the Mac (the side from General, and with an arrangement only where the

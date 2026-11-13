@@ -100,8 +100,9 @@ got_raw = wait(lambda: guest.capturing, 3)
 report("raw input reaches the window (injected input on this runner)", hooks.raw_events > 0,
        f"{hooks.raw_events} raw events")
 if got_raw:
-    check("pushing past the edge towards the Mac starts the capture", sent and sent[-1][0] == GU.MSG_G_ENTER,
-          sent[-1][1].decode() if sent else "")
+    enters = [p for m, p in sent if m == GU.MSG_G_ENTER]   # (the hooks may already have sent moves after it)
+    check("pushing past the edge towards the Mac starts the capture", len(enters) == 1,
+          enters[0].decode() if enters else str([m for m, _ in sent]))
     check("the hooks are installed", wait(lambda: len(hooks._hooks) == 2, 2), str(hooks._hooks))
     check("the pointer is parked in the middle", W.get_cursor_pos() == guest.park, f"{W.get_cursor_pos()} "
           f"vs {guest.park}")
@@ -115,7 +116,9 @@ if got_raw:
     report("the mouse hook sees input (injected input on this runner)", hooks.hook_events > 0,
            f"{hooks.hook_events} hook events")
     if moved:
-        dx, dy = next(GU.unpack_move(p) for m, p in sent[n:] if m == GU.MSG_G_MOVE)
+        time.sleep(0.2)
+        moves = [GU.unpack_move(p) for m, p in sent[n:] if m == GU.MSG_G_MOVE]
+        dx, dy = sum(m[0] for m in moves), sum(m[1] for m in moves)
         check("a move goes out to the Mac", dx > 0 and dy > 0, f"dx {dx}, dy {dy}")
         check("and the pointer stays parked", W.get_cursor_pos() == guest.park, str(W.get_cursor_pos()))
         n = len(sent)
@@ -143,11 +146,12 @@ if got_raw:
 time.sleep(0.3)
 W.send_inputs(key(0xA2), key(0xA4), key(0x25, ext=True), key(0x25, up=True, ext=True), key(0xA4, up=True),
               key(0xA2, up=True))
+n = len(sent)
 hot = wait(lambda: guest.capturing, 2)
 report("Ctrl+Alt+Left starts it (hotkey, injected input on this runner)", hot)
 if not hot:
     guest.hotkey()                                       # the same path without the keyboard
-check("captured", wait(lambda: guest.capturing, 2) and sent[-1][0] == GU.MSG_G_ENTER)
+check("captured", wait(lambda: guest.capturing, 2) and GU.MSG_G_ENTER in [m for m, _ in sent[n:]])
 guest.on_state({"active": True})
 guest.on_exit({"ratio": 0.25})
 check("sent back at 0.25: the pointer is on the left edge there", wait(lambda: not guest.capturing, 2)
