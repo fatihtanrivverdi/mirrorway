@@ -528,7 +528,8 @@ def _tone_pcm(ms, freq=440.0):
 
 def winaudio_player():
     """Windows' sound on the Mac (3.4): an AudioQueue plays 16-bit PCM through the Mac's output; 600 ms of sound
-    drain from the queue in about real time."""
+    drain from the queue in about real time (plus the first start); after a short gap (rebuffering) it plays on
+    without starting the hardware again."""
     import time
     from mirrorway.mac.player import AudioQueuePlayer
     pl = AudioQueuePlayer()
@@ -536,18 +537,26 @@ def winaudio_player():
         pl.queue(_tone_pcm(600))
         t0 = time.monotonic()
         pl.play(True)
-        while pl.queued() and time.monotonic() - t0 < 3:
-            time.sleep(0.01)
+        while not pl.callbacks and time.monotonic() - t0 < 3:
+            time.sleep(0.002)
+        first = time.monotonic() - t0
+        while pl.queued() and time.monotonic() - t0 < 4:
+            time.sleep(0.005)
         drained = time.monotonic() - t0
         assert pl.queued() == 0, f"{pl.queued()} bytes still queued after {drained:.1f} s"
-        assert 0.4 < drained < 1.5, f"600 ms drained in {drained:.2f} s"
-        pl.play(False)
-        pl.play(True)                                   # paused while Windows is silent, then on again
-        pl.queue(_tone_pcm(100))
-        time.sleep(0.3)
-        assert pl.queued() == 0
-        return (f"600 ms drained in {drained * 1000:.0f} ms, {pl.callbacks} callbacks of {pl.buffer_bytes} bytes, "
-                f"underruns {pl.ring.underruns}")
+        pl.play(False)                                  # a short gap: Windows' sound paused for a moment
+        time.sleep(0.2)
+        pl.queue(_tone_pcm(200))
+        t1 = time.monotonic()
+        pl.play(True)
+        while pl.queued() and time.monotonic() - t1 < 2:
+            time.sleep(0.005)
+        resumed = time.monotonic() - t1
+        assert pl.queued() == 0 and pl.starts == 1, (pl.queued(), pl.starts)
+        assert resumed < 0.35, f"200 ms after a gap took {resumed * 1000:.0f} ms"
+        return (f"first callback after {first * 1000:.0f} ms, 600 ms drained in {drained * 1000:.0f} ms; after a gap "
+                f"200 ms drained in {resumed * 1000:.0f} ms without a restart; {pl.callbacks} callbacks of "
+                f"{pl.buffer_bytes} bytes")
     finally:
         pl.close()
 

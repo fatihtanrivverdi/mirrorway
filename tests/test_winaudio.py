@@ -207,6 +207,54 @@ def test_sender_leaves_speakers_on_without_process_loopback_and_stops_on_mac_err
     assert spk.calls == []                                                    # the speakers were never touched
 
 
+def test_sender_reads_the_macs_refusal_even_if_sending_fails_first():
+    """On Windows a send to a channel the Mac already closed fails at once: the refusal must still be read."""
+    from mirrorway.win.audio import WinAudioSender
+
+    class ResetChannel(SendChannel):
+        def send_json(self, mtype, obj):
+            time.sleep(0.05)                          # the reader gets the Mac's message meanwhile
+            raise ConnectionResetError("reset by peer")
+    ch = ResetChannel([(A.MSG_AUDIO_INFO, json.dumps({"error": "not set to play on the Mac"}).encode())])
+    s = WinAudioSender(control=None, capture_factory=lambda: FakeLoopback(), speakers=FakeVolume())
+    s._connect = lambda: ch
+    s.set_state(True)
+    deadline = time.time() + 5
+    while s.running and time.time() < deadline:
+        time.sleep(0.02)
+    assert not s.running and "not set to play on the Mac" in s.last_error
+
+
+def test_mac_player_keeps_running_through_short_gaps(monkeypatch):
+    """Rebuffering only stops taking from the queue; the AudioQueue is paused only after IDLE_PAUSE_S."""
+    from mirrorway.mac import player as P
+    calls = []
+
+    class AT:
+        def AudioQueueStart(self, aq, ts):
+            calls.append("start")
+            return 0
+
+        def AudioQueuePause(self, aq):
+            calls.append("pause")
+            return 0
+    monkeypatch.setattr(P, "_toolbox", lambda: AT())
+    monkeypatch.setattr(P, "IDLE_PAUSE_S", 0.2)
+    pl = P.AudioQueuePlayer.__new__(P.AudioQueuePlayer)
+    pl.playing = pl.running = pl.closed = False
+    pl.starts, pl._idle_since, pl._lock, pl.aq = 0, None, threading.Lock(), None
+    pl.play(True)
+    pl.play(False)
+    pl.play(True)                                   # a short gap: no pause, no second start
+    time.sleep(0.3)
+    assert calls == ["start"] and pl.running and pl.starts == 1
+    pl.play(False)
+    time.sleep(0.4)                                 # silence for longer: the hardware is paused
+    assert calls == ["start", "pause"] and not pl.running
+    pl.play(True)
+    assert calls == ["start", "pause", "start"] and pl.starts == 2
+
+
 def test_speakers_unmuted_after_a_crash():
     from mirrorway.win.audio import WinAudioSender
     spk = FakeVolume(muted=True)

@@ -926,12 +926,23 @@ class WinAudioSession(threading.Thread):
         self.closed = True
         self.ch.close()
 
+    def _linger(self, timeout: float = 5.0) -> None:
+        """After a refusal: let Windows read the reason and close first (closing at once can make Windows' next
+        send fail with a reset before it reads the message, as on the Windows runner)."""
+        try:
+            self.ch.sock.settimeout(timeout)
+            while not self.closed:
+                self.ch.recv()
+        except Exception:
+            pass
+
     def run(self) -> None:
         srv = self.server
         rx = None
         try:
             if srv.audio_route() != "mac":
                 self.ch.send_json(AU.MSG_AUDIO_INFO, {"error": T("Windows' sound is not set to play on the Mac")})
+                self._linger()
                 return
 
             def opened(rate, channels, player):
@@ -958,6 +969,7 @@ class WinAudioSession(threading.Thread):
                     log.warning("Cannot play Windows' sound: %s", exc)
                     self.ch.send_json(AU.MSG_AUDIO_INFO, {"error": T("the Mac cannot play sound: {error}").format(
                         error=srv.winaudio_error)})
+                    self._linger()
                     return
                 if mtype == AU.MSG_AUDIO:
                     m["packets"] += 1

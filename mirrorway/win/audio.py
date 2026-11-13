@@ -263,16 +263,18 @@ class WinAudioSender(_Switch):
                     q.put_nowait((pcm, silent))
                 except _queue.Full:
                     self.dropped += 1
+            reader = None
             try:
                 ch = self._ch = self._connect()
+                self.last_error = ""
+                reader = threading.Thread(target=self._reader, args=(ch, stop), daemon=True,
+                                          name="mirrorway-winaudio-stats")
+                reader.start()                          # first, so a refusal from the Mac is read
                 cap = self.capture_factory()
                 cap.start(on_pcm)
                 self.source = getattr(cap, "name", "?")
-                self.last_error = ""
                 ch.send_json(A.MSG_AUDIO_INFO, {"rate": cap.rate, "channels": cap.channels, "format": A.FORMAT,
                                                 "source": self.source})
-                threading.Thread(target=self._reader, args=(ch, stop), daemon=True,
-                                 name="mirrorway-winaudio-stats").start()
                 if getattr(cap, "mutes_ok", False):
                     self._mute()
                 else:
@@ -280,6 +282,8 @@ class WinAudioSender(_Switch):
                 log.info("Windows' sound is playing on the Mac (%s)", self.source)
                 self._send_loop(ch, cap, q, stop)
             except Exception as exc:
+                if reader is not None and reader is not threading.current_thread():
+                    reader.join(1.0)                    # the Mac may have said why it closed the channel
                 if not stop.is_set():
                     self.last_error = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
                     log.info("Windows' sound to the Mac stopped: %s", self.last_error)

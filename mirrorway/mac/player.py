@@ -3,13 +3,17 @@
 The same queue interface as the SDL player on Windows (queued, queue, clear, play, close), so mirrorway.audio's
 Receiver and QueuePolicy decide when to start, rebuffer and trim. The AudioQueue keeps BUFFERS small buffers of
 BUFFER_MS each in flight; its callback (on the queue's own thread) refills one from our byte queue, padding with
-silence when it runs dry. Paused while Windows is silent, so the Mac's audio hardware can go idle.
+silence when it runs dry. play(False) (rebuffering, a short silence) only stops taking from the queue, the
+AudioQueue keeps running and plays silence: starting it again takes a few hundred milliseconds on some Macs (CI
+measured ~400 ms), which would add up as delay. Only after IDLE_PAUSE_S without sound is it paused, so the Mac's
+audio hardware can go idle.
 """
 from __future__ import annotations
 
 import ctypes
 import logging
 import threading
+import time
 from ctypes import POINTER, byref, c_double, c_float, c_int32, c_uint32, c_void_p
 
 from .. import audio as A
@@ -23,6 +27,7 @@ K_FLAG_PACKED = 0x8
 K_PARAM_VOLUME = 1
 BUFFERS = 3
 BUFFER_MS = 10
+IDLE_PAUSE_S = 3.0          # the hardware is paused only after this long without sound (starting it again is slow)
 
 
 class AudioStreamBasicDescription(ctypes.Structure):
@@ -115,9 +120,13 @@ class AudioQueuePlayer:
         self.aq = c_void_p()
         _check(at.AudioQueueNewOutput(byref(self.asbd), self._cb, None, None, None, 0, byref(self.aq)),
                "AudioQueueNewOutput")
-        self.playing = False
+        self.playing = False                    # taking sound from the queue
+        self.running = False                    # the AudioQueue is started (not paused)
         self.closed = False
         self.callbacks = 0
+        self.starts = 0
+        self._idle_since: "float | None" = None
+        self._lock = threading.Lock()
         try:
             at.AudioQueueSetParameter(self.aq, K_PARAM_VOLUME, 1.0)
             for _ in range(BUFFERS):
@@ -155,19 +164,40 @@ class AudioQueuePlayer:
         self.ring.clear()
 
     def play(self, on: bool = True) -> None:
-        if self.closed or on == self.playing:
-            return
-        at = _toolbox()
-        if on:
-            _check(at.AudioQueueStart(self.aq, None), "AudioQueueStart")
-        else:
-            at.AudioQueuePause(self.aq)
-        self.playing = on
+        with self._lock:
+            if self.closed:
+                return
+            if on:
+                self.playing = True
+                self._idle_since = None
+                if not self.running:
+                    _check(_toolbox().AudioQueueStart(self.aq, None), "AudioQueueStart")
+                    self.running = True
+                    self.starts += 1
+                return
+            if not self.playing:
+                return
+            self.playing = False
+            self._idle_since = time.monotonic()
+        t = threading.Timer(IDLE_PAUSE_S, self._pause_if_idle)
+        t.daemon = True
+        t.start()
+
+    def _pause_if_idle(self) -> None:
+        with self._lock:
+            since = self._idle_since
+            if self.closed or self.playing or not self.running or since is None:
+                return
+            if time.monotonic() - since < IDLE_PAUSE_S - 0.05:
+                return
+            _toolbox().AudioQueuePause(self.aq)
+            self.running = False
 
     def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
+        with self._lock:
+            if self.closed:
+                return
+            self.closed = True
         at = _toolbox()
         at.AudioQueueStop(self.aq, True)
         at.AudioQueueDispose(self.aq, True)

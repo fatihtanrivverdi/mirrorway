@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.4.1 — Windows's sound on the Mac, first release
+3.4.0 was not published: one test failed on the Windows runner. Everything in 3.4.0 below is in this version, plus:
+- On the Mac, Windows's sound keeps the AudioQueue running through short gaps (rebuffering) and pauses the audio
+  hardware only after 3 seconds of silence. Starting it took ~400 ms on the macOS runner, which would have added
+  delay after every short pause.
+- When the Mac refuses Windows's sound (not set to play on the Mac), Windows now always shows the reason: the Mac
+  waits for Windows to read it before closing, and Windows reads it even if its own send failed first.
+- CI on a Windows runner with a virtual sound card, for real: another program's tone is captured (−12 dBFS),
+  Mirrorway's own process tree is left out, capture continues with the speakers muted, and the tone reached the
+  Mac side 94 ms after it was started (including starting the program that played it). The macOS runner played the
+  AudioQueue's sound and ScreenCaptureKit heard it.
+
 ## 3.4.0 — Windows's sound on the Mac; one choice for where sound plays
 - **Where sound plays** is now one choice on the Mac (Mirrorway › Audio, Settings › Audio) and on Windows
   (Settings › Audio): **each on its own** (the default), **all on Windows** (the Mac's sound on Windows, as before)
