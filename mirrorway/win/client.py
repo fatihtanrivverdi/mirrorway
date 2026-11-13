@@ -176,7 +176,8 @@ class ControlClient(threading.Thread):
                  apply_update_fn: Optional[Callable] = None, netinfo_fn: Optional[Callable] = None,
                  credentials: Optional[Credentials] = None, on_view: Optional[Callable[[dict], None]] = None,
                  files_dir=None, on_notify: Optional[Callable[[str, str], None]] = None,
-                 audio_player_factory: Optional[Callable] = None, lock_fn: Optional[Callable[[], object]] = None):
+                 audio_player_factory: Optional[Callable] = None, lock_fn: Optional[Callable[[], object]] = None,
+                 audio_capture_factory: Optional[Callable] = None, speakers=None):
         super().__init__(daemon=True, name="mirrorway-control")
         self.on_view = on_view                 # the Mac asked for its screen window to open (second screen)
         self.lock_fn = lock_fn                 # locks Windows (the Mac locked, with "Lock both computers together")
@@ -189,6 +190,11 @@ class ControlClient(threading.Thread):
         if audio_player_factory is not None:
             from .audio import AudioClient
             self.audio = AudioClient(self, audio_player_factory)
+        self.winaudio = None                   # 3.4: Windows' sound to the Mac
+        if audio_capture_factory is not None:
+            from .audio import WinAudioSender
+            self.winaudio = WinAudioSender(self, audio_capture_factory, speakers=speakers, cfg=cfg)
+        self.audio_route = ""                  # where the Mac says sound plays: "own" / "windows" / "mac" ("" = unknown)
         self.cfg = cfg
         self.creds = credentials or Credentials(cfg)
         self.auth_mode = ""                 # "key" (device key) / "legacy" (old long code)
@@ -232,6 +238,8 @@ class ControlClient(threading.Thread):
         self._wake.set()
         if self.audio is not None:
             self.audio.stop()
+        if self.winaudio is not None:
+            self.winaudio.stop()
         self.kick()
 
     def kick(self) -> None:
@@ -282,6 +290,29 @@ class ControlClient(threading.Thread):
         """The Mac's sound is being played here (the Mac turned the audio transfer on)."""
         a = self.audio
         return bool(a is not None and a.running)
+
+    def can_route_audio(self) -> bool:
+        """The Mac takes "where sound plays" from here and this Windows can send its sound (both 3.4 or later)."""
+        return self.winaudio is not None and AU.WINAUDIO_FEATURE in self.server_features() and self.can_ask_mac()
+
+    @property
+    def sending_audio(self) -> bool:
+        """Windows' sound is being sent to the Mac."""
+        w = self.winaudio
+        return bool(w is not None and w.running)
+
+    def set_audio_route(self, route: str) -> bool:
+        if self.can_route_audio():
+            return self.ask_mac({"audio_route": route})
+        if route in ("own", "windows"):
+            return self.ask_mac({"audio": route == "windows"})
+        return False
+
+    def toggle_audio(self) -> bool:
+        """The panel's tile: sharing off <-> the last direction (the Mac decides)."""
+        if self.can_route_audio():
+            return self.ask_mac({"audio_toggle": True})
+        return self.ask_mac({"audio": not self.audio_on})
 
     def send_json(self, mtype: int, obj) -> None:
         ch = self.ch
@@ -343,6 +374,7 @@ class ControlClient(threading.Thread):
                          "auto_update": True,
                          "features": ["echo", "text", "devkeys", RC.FEATURE, EXTEND_FEATURE, GESTURES_FEATURE,
                                       FX.FEATURE] + ([AU.FEATURE] if self.audio is not None else [])
+                                     + ([AU.WINAUDIO_FEATURE] if self.winaudio is not None else [])
                                      + ([LOCK_FEATURE] if self.lock_fn is not None else [])}
                 ch, server_hello, mode = open_channel(self.creds, sock, ROLE_CONTROL, hello)
             except Exception as exc:
@@ -398,6 +430,8 @@ class ControlClient(threading.Thread):
                 self.remote.on_disconnect()
                 if self.audio is not None:
                     self.audio.stop()
+                if self.winaudio is not None:
+                    self.winaudio.stop()
             if not self._stop_evt.is_set():
                 self._set("disconnected", T("Connection dropped, retrying…"))
                 self._wait(2)
@@ -528,8 +562,13 @@ class ControlClient(threading.Thread):
             elif mtype == MSG_EXIT:
                 r.on_exit()
             elif mtype == AU.MSG_AUDIO_STATE:
+                st = json.loads(payload.decode("utf-8"))
+                route = st.get("route")
+                self.audio_route = route if route in AU.ROUTES else ("windows" if st.get("on") else "own")
                 if self.audio is not None:
-                    self.audio.set_state(bool(json.loads(payload.decode("utf-8")).get("on")))
+                    self.audio.set_state(bool(st.get("on")))
+                if self.winaudio is not None:
+                    self.winaudio.set_state(bool(st.get("capture")))
             elif mtype == FX.MSG_FILES_OFFER:
                 if self.files is not None:
                     self.files.on_offer(json.loads(payload.decode("utf-8")))

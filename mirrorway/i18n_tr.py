@@ -201,8 +201,6 @@ TR = {
         'Dosya aktarımı: —',
     'Audio':
         'Ses aktarımı',
-    "Play the Mac's Sound on Windows":
-        "Mac'in sesi Windows'ta çalsın",
     "Mute the Mac's Speakers Meanwhile":
         "Bu sırada Mac'in hoparlörünü kapat",
     'Status: —':
@@ -233,8 +231,6 @@ TR = {
         'Önceki sürüme dön',
     'Open Permission Settings':
         'İzin ayarlarını aç',
-    'Status: off':
-        'Durum: kapalı',
     'Status: playing on Windows':
         "Durum: Windows'ta çalıyor",
     'Status: available once Mirrorway on Windows is updated':
@@ -741,8 +737,6 @@ TR = {
         'Bağlantıya göre otomatik ayarla (H.264)',
     'Windows monitor':
         'Windows monitörü',
-    "Play the Mac's sound on Windows":
-        "Mac'in sesini Windows'ta çal",
     "Mute the Mac's speakers meanwhile":
         "Bu sırada Mac'in hoparlörünü kapat",
     'Clipboard sync':
@@ -985,4 +979,50 @@ TR = {
         'Kilit ekranı',
     'version {version}':
         'sürüm {version}',
+    "Status: each computer plays its own sound":
+        "Durum: her bilgisayar kendi sesini çalıyor",
+    "Each Computer Plays Its Own Sound":
+        "Her Bilgisayar Kendi Sesini Çalsın",
+    "All Sound on Windows":
+        "Tüm Ses Windows'ta",
+    "All Sound on the Mac":
+        "Tüm Ses Mac'te",
+    "Status: Windows' sound plays on the Mac":
+        "Durum: Windows'un sesi Mac'te çalıyor",
+    "Windows' sound is not set to play on the Mac":
+        "Windows'un sesi Mac'te çalacak şekilde ayarlı değil",
+    "the Mac cannot play sound: {error}":
+        "Mac ses çalamıyor: {error}",
+    "The Mac's sound plays on the Mac, Windows' sound on Windows.":
+        "Mac'in sesi Mac'te, Windows'un sesi Windows'ta çalar.",
+    "The Mac's sound plays on Windows too, so everything is heard from Windows' speakers.":
+        "Mac'in sesi de Windows'ta çalar; her şey Windows'un hoparlöründen duyulur.",
+    "Windows' sound plays on the Mac (Windows' speakers are muted meanwhile), so everything is heard from the Mac.":
+        "Windows'un sesi Mac'te çalar (bu sırada Windows'un hoparlörü kapanır); her şey Mac'ten duyulur.",
+    "Each on its own":
+        "Her biri kendinde",
+    "All on Windows":
+        "Hepsi Windows'ta",
+    "All on the Mac":
+        "Hepsi Mac'te",
+    "Each computer plays its own sound":
+        "Her bilgisayar kendi sesini çalsın",
+    "All sound on this PC":
+        "Tüm ses bu bilgisayarda",
+    "All sound on the Mac":
+        "Tüm ses Mac'te",
+    "Where sound plays":
+        "Ses nerede çalsın",
+    "Not connected to the Mac":
+        "Mac'e bağlı değil",
+    "This PC's sound plays on the Mac; this PC's speakers are muted meanwhile":
+        "Bu bilgisayarın sesi Mac'te çalıyor; bu sırada hoparlörü kapalı",
+    "Update Mirrorway on the Mac to send this PC's sound there":
+        "Bu bilgisayarın sesini Mac'e göndermek için Mac'teki Mirrorway'i güncelleyin",
+    "⚠︎ {error}":
+        "⚠︎ {error}",
+    "Sound":
+        "Ses",
+    "All on this PC":
+        "Hepsi bu bilgisayarda",
 }

@@ -189,6 +189,17 @@ def _screen(cfg, st, ctx) -> Page:
     ])
 
 
+def audio_routes():
+    """Where sound plays (3.4), as the Mac's settings name it."""
+    return [("own", T("Each on its own")), ("windows", T("All on Windows")), ("mac", T("All on the Mac"))]
+
+
+def win_audio_routes():
+    """The same choice as Windows' settings name it."""
+    return [("own", T("Each computer plays its own sound")), ("windows", T("All sound on this PC")),
+            ("mac", T("All sound on the Mac"))]
+
+
 def audio_app_modes():
     return [("all", T("All apps")), ("selected", T("Only the apps below"))]
 
@@ -198,20 +209,32 @@ def selected_audio_apps(cfg) -> dict:
     return {str(k): str(v) for k, v in apps.items()} if isinstance(apps, dict) else {}
 
 
+def mac_audio_route(cfg) -> str:
+    if cfg.get("audio"):
+        return "windows"
+    return "mac" if cfg.get("audio_from_windows") else "own"
+
+
 def _audio(cfg, st, ctx) -> Page:
     mode = cfg.get("audio_apps_mode") if cfg.get("audio_apps_mode") in ("all", "selected") else "all"
-    groups = [
-        Group("", [
-            Item("switch", "audio", T("Play the Mac's sound on Windows"), bool(cfg.get("audio"))),
-            Item("switch", "audio_mute_mac", T("Mute the Mac's speakers meanwhile"),
-                 bool(cfg.get("audio_mute_mac", True))),
-            Item("text", "audio_state", ctx.get("audio_text") or T("Status: —")),
-        ]),
-        Group(T("Apps"), [Item("segmented", "audio_apps_mode", T("Send the sound of"), mode, audio_app_modes())],
-              T("Only the chosen apps' sound goes to Windows. With 'Mute the Mac's speakers' on, the other apps are "
-                "silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both).")
-              if mode == "selected" else ""),
-    ]
+    route = mac_audio_route(cfg)
+    first = [Item("segmented", "audio_route", T("Where sound plays"), route, audio_routes())]
+    if route == "windows":
+        first.append(Item("switch", "audio_mute_mac", T("Mute the Mac's speakers meanwhile"),
+                          bool(cfg.get("audio_mute_mac", True))))
+    first.append(Item("text", "audio_state", ctx.get("audio_text") or T("Status: —")))
+    notes = {"own": T("The Mac's sound plays on the Mac, Windows' sound on Windows."),
+             "windows": T("The Mac's sound plays on Windows too, so everything is heard from Windows' speakers."),
+             "mac": T("Windows' sound plays on the Mac (Windows' speakers are muted meanwhile), so everything is "
+                      "heard from the Mac.")}
+    groups = [Group("", first, notes[route])]
+    if route != "windows":
+        return Page("audio", T("Audio"), "speaker.wave.2", "#D9485F", groups)
+    groups.append(Group(T("Apps"), [Item("segmented", "audio_apps_mode", T("Send the sound of"), mode,
+                                         audio_app_modes())],
+                        T("Only the chosen apps' sound goes to Windows. With 'Mute the Mac's speakers' on, the other "
+                          "apps are silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then "
+                          "play on both).") if mode == "selected" else ""))
     if mode == "selected":
         chosen = selected_audio_apps(cfg)
         apps = dict(ctx.get("audio_apps") or [])                 # running apps: {bundle id: name}
@@ -366,15 +389,33 @@ def win_pages(cfg, ctx: Optional[dict] = None) -> List[Page]:
         Item("switch", "overlay_window", T("Measurements box in a window"), bool(cfg.get("overlay_window"))),
         Item("switch", "overlay_extend", T("Measurements on the second screen"), bool(cfg.get("overlay_extend"))),
     ]
-    if not connected:
-        sound = T("Off")
-    elif not ctx.get("audio_supported"):
-        sound = T("Update Mirrorway on the Mac to turn it on from here")
+    route = ctx.get("audio_route") or ""
+    if ctx.get("route_supported") and route in ("own", "windows", "mac"):      # 3.4: the Mac and this PC
+        if not connected:
+            state = T("Not connected to the Mac")
+        elif route == "mac":
+            state = (T("This PC's sound plays on the Mac; this PC's speakers are muted meanwhile")
+                     if ctx.get("sending_audio") else T("Starting…"))
+            if ctx.get("audio_error"):
+                state = T("⚠︎ {error}").format(error=ctx["audio_error"][:90])
+        elif route == "windows":
+            state = T("The Mac's sound plays on this PC") if ctx.get("audio_on") else T("Starting…")
+        else:
+            state = T("Each computer plays its own sound")
+        audio = [Item("popup", "audio_route", T("Where sound plays"), route, win_audio_routes(),
+                      detail=state, enabled=connected)]
     else:
-        sound = T("The Mac's sound plays on this PC") if ctx.get("audio_on") else T("Off")
-    audio = [Item("button", "action:audio", T("The Mac's sound"), detail=sound,
-                  button=T("Turn off") if ctx.get("audio_on") else T("Turn on"),
-                  enabled=connected and bool(ctx.get("audio_supported")))]
+        if not connected:
+            sound = T("Off")
+        elif not ctx.get("audio_supported"):
+            sound = T("Update Mirrorway on the Mac to turn it on from here")
+        else:
+            sound = T("The Mac's sound plays on this PC") if ctx.get("audio_on") else T("Off")
+            if route and not ctx.get("route_supported"):
+                sound += " · " + T("Update Mirrorway on the Mac to send this PC's sound there")
+        audio = [Item("button", "action:audio", T("The Mac's sound"), detail=sound,
+                      button=T("Turn off") if ctx.get("audio_on") else T("Turn on"),
+                      enabled=connected and bool(ctx.get("audio_supported")))]
 
     clip = [
         Item("switch", "clipboard", T("Clipboard sync"), bool(cfg.get("clipboard")),

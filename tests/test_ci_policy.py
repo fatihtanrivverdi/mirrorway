@@ -37,17 +37,21 @@ def test_workflow_is_locked_down():
     # The secret key only in the signing step of the release job
     assert re.findall(r"secrets\.(\w+)", wf) == ["MIRRORWAY_SIGNING_KEY"]
     rel = by_name["release"]
-    assert "startsWith(github.ref, 'refs/tags/v')" in rel and "needs: [linux, macos, windows]" in rel
+    assert "startsWith(github.ref, 'refs/tags/v')" in rel and "needs: [linux, macos, windows, windows-sound]" in rel
     steps = rel.split("      - ")
     sign = [st for st in steps if "secrets.MIRRORWAY_SIGNING_KEY" in st]
     assert len(sign) == 1 and "make_release.py" in sign[0] and "publish_release" not in sign[0]
+    # The virtual sound card's driver (an outside action) never runs where release packages are built
+    snd = by_name["windows-sound"]
+    assert "LABSN/sound-ci-helpers@" in snd and "upload-artifact" not in snd and "secrets." not in snd
+    assert "uses: LABSN" not in by_name["windows"] and "uses: LABSN" not in by_name["macos"]
     rep = by_name["report"]
     assert "uses:" not in rep and "pytest" not in rep and "pip install" not in rep
     assert ("if: ${{ failure() || (always() && (startsWith(github.ref, 'refs/tags/v') || "
             "github.event_name == 'workflow_dispatch')) }}") in rep
     assert "git push -q -f" in rep and " ci-logs" in rep and "main" not in rep.split("git push", 1)[1]
     # macOS/Windows only by hand or on a release tag
-    for job in ("macos", "windows"):
+    for job in ("macos", "windows", "windows-sound"):
         block = re.split(r"\n  (?=\S)", wf.split(f"\n  {job}:", 1)[1], maxsplit=1)[0]
         assert "workflow_dispatch" in block and "refs/tags/v" in block, job
 

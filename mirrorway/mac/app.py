@@ -252,12 +252,16 @@ class MirrorwayMacApp(rumps.App):
         self.mi_files.state = int(bool(cfg.get("file_clipboard", True)))
         self.mi_files_state = rumps.MenuItem(T("File transfer: —"))
         self.m_audio = rumps.MenuItem(T("Audio"))
-        self.mi_audio = rumps.MenuItem(T("Play the Mac's Sound on Windows"), callback=self._toggle_audio)
-        self.mi_audio.state = int(bool(cfg.get("audio")))
+        self.route_items = {}                   # where sound plays (3.4), one of three
+        for route, title in (("own", T("Each Computer Plays Its Own Sound")), ("windows", T("All Sound on Windows")),
+                             ("mac", T("All Sound on the Mac"))):
+            self.route_items[route] = rumps.MenuItem(title, callback=self._make_route(route))
+            self.m_audio.add(self.route_items[route])
+        self._check_routes()
+        self.m_audio.add(None)
         self.mi_audio_mute = rumps.MenuItem(T("Mute the Mac's Speakers Meanwhile"), callback=self._toggle_audio_mute)
         self.mi_audio_mute.state = int(bool(cfg.get("audio_mute_mac", True)))
         self.mi_audio_state = rumps.MenuItem(T("Status: —"))
-        self.m_audio.add(self.mi_audio)
         self.m_audio.add(self.mi_audio_mute)
         self.m_audio.add(None)
         self.m_audio.add(self.mi_audio_state)
@@ -429,11 +433,22 @@ class MirrorwayMacApp(rumps.App):
             if U.spawn_restart():
                 self.quit_app(None)
 
-    def _toggle_audio(self, sender):
-        val = not bool(self.cfg.get("audio"))
-        self.cfg.set("audio", val)
-        sender.state = int(val)
-        threading.Thread(target=self.server.send_audio_state, daemon=True, name="mirrorway-audio-state").start()
+    def _toggle_audio(self, sender=None):
+        """The panel tile and ⌃⌥A: sharing off <-> the last direction (all on Windows by default)."""
+        self.server.toggle_audio("on the Mac")
+        self._check_routes()
+
+    def _make_route(self, route: str):
+        def cb(sender):
+            self.server.set_audio_route(route, "in the menu")
+            self._check_routes()
+        return cb
+
+    def _check_routes(self) -> None:
+        from .. import prefs
+        now = prefs.mac_audio_route(self.cfg)
+        for route, item in self.route_items.items():
+            item.state = int(route == now)
 
     def _toggle_audio_mute(self, sender):
         val = not bool(self.cfg.get("audio_mute_mac", True))
@@ -443,8 +458,17 @@ class MirrorwayMacApp(rumps.App):
 
     @staticmethod
     def _audio_text(a, connected: bool) -> str:
-        if not a or not a.get("enabled"):
-            return T("Status: off")
+        route = (a or {}).get("route") or ("windows" if (a or {}).get("enabled") else "own")
+        if route == "own":
+            return T("Status: each computer plays its own sound")
+        if route == "mac":
+            if a.get("from_windows_error"):
+                return T("Status: ⚠︎ {error}").format(error=a["from_windows_error"][:70])
+            if a.get("from_windows"):
+                return T("Status: Windows' sound plays on the Mac")
+            if connected and not a.get("from_windows_supported"):
+                return T("Status: available once Mirrorway on Windows is updated")
+            return T("Status: starts when Windows connects") if not connected else T("Status: starting…")
         if a.get("error"):
             return T("Status: ⚠︎ {error}").format(error=a["error"][:70])
         if a.get("active"):
@@ -839,7 +863,7 @@ class MirrorwayMacApp(rumps.App):
         elif key == "tile:second":
             self.toggle_second_screen(st)
         elif key == "tile:audio":
-            self._toggle_audio(self.mi_audio)
+            self._toggle_audio()
         elif key == "tile:clipboard":
             self._toggle_setting("clipboard", self.mi_clip)
         elif key == "tile:files":
@@ -1089,9 +1113,9 @@ class MirrorwayMacApp(rumps.App):
                     self.server.restart_video()
             elif key == "extend_monitor":
                 self._set_extend(list(value) if value else None)
-            elif key == "audio":
-                cfg.set("audio", bool(value))
-                self._bg(self.server.send_audio_state, "mirrorway-audio-state")
+            elif key == "audio_route":
+                self.server.set_audio_route(str(value), "in Settings")
+                self._check_routes()
             elif key == "audio_mute_mac":
                 cfg.set(key, bool(value))
                 self._bg(self.server.audio_mute_changed, "mirrorway-audio-mute")
@@ -1168,7 +1192,7 @@ class MirrorwayMacApp(rumps.App):
                 (self.mi_swap, "swap_cmd_ctrl", False), (self.mi_unicode, "option_unicode", True),
                 (self.mi_edge, "edge_switch", False), (self.mi_clip, "clipboard", False),
                 (self.mi_gestures, "gestures", True), (self.mi_files, "file_clipboard", True),
-                (self.mi_audio, "audio", False), (self.mi_audio_mute, "audio_mute_mac", True),
+                (self.mi_audio_mute, "audio_mute_mac", True),
                 (self.mi_share, "screen_share", False), (self.mi_adaptive, "adaptive_quality", True),
                 (self.mi_upd_auto, "auto_update_check", True), (self.mi_net_lock, "network_lock", True),
                 (self.mi_panel, "quick_panel", True)):
@@ -1328,7 +1352,7 @@ class MirrorwayMacApp(rumps.App):
         self._refresh_extend(st)
         self.mi_files_state.title = self._files_text(st.get("files"))
         self.mi_audio_state.title = self._audio_text(st.get("audio"), bool(st.get("connected")))
-        self.mi_audio.state = int(bool(self.cfg.get("audio")))      # Windows' panel can change it too
+        self._check_routes()                                         # Windows can change it too
         ev = self.server.file_event
         if ev is not None:
             self.server.file_event = None

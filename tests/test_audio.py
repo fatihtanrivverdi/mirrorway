@@ -422,5 +422,13 @@ def test_chosen_apps_and_settings_page():
     assert [r.title for r in rows] == ["Old App", "Safari", "Spotify"]
     assert [r.value for r in rows] == [True, False, True] and rows[0].detail == "not running"
     assert "Only the chosen apps" in page.groups[1].note
-    empty = {p.id: p for p in P.mac_pages(Cfg(audio_apps_mode="selected"), {})}["audio"]
+    empty = {p.id: p for p in P.mac_pages(Cfg(audio=True, audio_apps_mode="selected"), {})}["audio"]
     assert empty.groups[2].items[0].key == "no_audio_apps"
+    # 3.4: where sound plays; the Mac's own options only when its sound goes to Windows
+    for cfg, route in ((Cfg(), "own"), (Cfg(audio=True), "windows"), (Cfg(audio_from_windows=True), "mac")):
+        page = {p.id: p for p in P.mac_pages(cfg, {})}["audio"]
+        assert page.item("audio_route").value == route
+        assert [v for v, _ in page.item("audio_route").options] == ["own", "windows", "mac"]
+        keys = {it.key for it in page.items()}
+        assert ("audio_mute_mac" in keys) == ("audio_apps_mode" in keys) == (route == "windows")
+        assert page.groups[0].note

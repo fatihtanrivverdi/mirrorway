@@ -72,6 +72,14 @@ def _audio_player_factory():
         return None
 
 
+def _audio_capture_factory():
+    """WASAPI loopback to send Windows' sound to the Mac (3.4); only on Windows."""
+    if sys.platform != "win32":
+        return None
+    from .audio import default_capture
+    return default_capture
+
+
 class WinApp:
     def __init__(self, cfg, open_viewer: bool = False):
         self.cfg = cfg
@@ -132,9 +140,15 @@ class WinApp:
                                      on_view=lambda req: self._post(self._view_requested, req),
                                      files_dir=CONFIG_DIR,
                                      audio_player_factory=_audio_player_factory(),
+                                     audio_capture_factory=_audio_capture_factory(),
                                      on_notify=lambda title, msg: self._post(self._show_notification, title, msg),
                                      lock_fn=winapi.lock_workstation if sys.platform == "win32" else None)
         self.control.enable_log_forwarding()
+        if self.control.winaudio is not None:          # Mirrorway stopped while it had muted the speakers
+            try:
+                self.control.winaudio.restore_speakers()
+            except Exception as exc:
+                log.info("Could not restore the speakers: %s", exc)
         self.session = None
         if sys.platform == "win32":                      # Windows locked or unlocked: tell the Mac
             from .session import SessionWatcher
@@ -277,7 +291,9 @@ class WinApp:
                                mac_name=c.server_name or self.creds.mac_name() or "", remote=self.remote.active,
                                viewer=viewer_open, side=getattr(c, "server_side", "right"), rtt_ms=c.last_rtt_ms,
                                fps=fps, audio_supported=c.can_ask_mac(), audio_on=c.audio_on,
-                               reconnecting=time.monotonic() < self._reconnect_until)
+                               reconnecting=time.monotonic() < self._reconnect_until,
+                               audio_route=c.audio_route if c.can_route_audio() else "",
+                               sending_audio=c.sending_audio)
 
     def toggle_panel(self) -> None:
         if self.panel is None:
@@ -306,7 +322,7 @@ class WinApp:
         elif key == "tile:files":
             self.cfg.set("file_clipboard", not bool(self.cfg.get("file_clipboard", True)))
         elif key == "tile:audio":
-            c.ask_mac({"audio": not c.audio_on})
+            c.toggle_audio()
         elif key == "tile:reconnect":
             self._reconnect_until = time.monotonic() + 3.0
             c.kick()
@@ -489,6 +505,9 @@ class WinApp:
                "mac_ip": (c.file_target or ("",))[0], "rtt_ms": c.last_rtt_ms, "auth": c.auth_mode,
                "paired": creds.paired(), "fingerprint": fp, "found": found_text,
                "audio_supported": c.can_ask_mac(), "audio_on": c.audio_on,
+               "audio_route": c.audio_route, "route_supported": c.can_route_audio(),
+               "sending_audio": c.sending_audio,
+               "audio_error": c.winaudio.last_error if c.winaudio is not None and c.audio_route == "mac" else "",
                "startup": {"available": startup.available(), "enabled": startup.is_enabled()},
                "lockscreen": self.lockscreen_state(),
                "version": __version__}
@@ -567,6 +586,8 @@ class WinApp:
                 c.kick()
             elif key == "action:audio":
                 c.ask_mac({"audio": not c.audio_on})
+            elif key == "audio_route":
+                c.set_audio_route(str(value))
             elif key == "action:logs":
                 if sys.platform == "win32":
                     os.startfile(str(CONFIG_DIR))

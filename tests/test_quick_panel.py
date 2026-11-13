@@ -125,7 +125,7 @@ def test_connected_panel():
     s = p.tile("screen")
     assert s.on and s.enabled and s.subtitle == "On Windows · ⌃⌥S"
     assert p.tile("second").subtitle == "Off · ⌃⌥D" and p.tile("second").enabled and not p.tile("second").on
-    assert p.tile("audio").on and p.tile("audio").detail == "On Windows"
+    assert p.tile("audio").on and p.tile("audio").detail == "All on Windows"
     assert p.tile("clipboard").on and p.tile("clipboard").subtitle == "Text and images"
     assert p.tile("files").detail == "Copy and paste"
     w = p.tile("wake")
@@ -153,7 +153,7 @@ def test_waiting_panel():
     assert not p.primary.enabled
     assert not p.tile("screen").enabled and p.tile("screen").detail == "Off"
     assert not p.tile("second").enabled
-    assert p.tile("audio").enabled and p.tile("audio").detail == "On the Mac"
+    assert p.tile("audio").enabled and p.tile("audio").detail == "Each on its own"
     assert p.tile("clipboard").detail == "Off" and not p.tile("clipboard").on
     assert p.tile("files").detail == "Off"
     w = p.tile("wake")

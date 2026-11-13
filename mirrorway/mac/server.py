@@ -27,7 +27,7 @@ from ..protocol import (ACTIONS_FEATURE, LOCK_FEATURE, MSG_BUTTON, MSG_ENTER, MS
                         MSG_LOCK, MSG_LOCKED, MSG_ACTION, MSG_CLIPBOARD, MSG_CLIPDATA, MSG_ECHO, MSG_ECHO_REPLY, MSG_FRAME, MSG_FRAME2, MSG_HELLO,
                         MSG_FRAME_DELTA, MSG_FRAME_H264, MSG_KEYFRAME_REQ, MSG_LEAVE, MSG_LOG, MSG_MOVE, MSG_PING, MSG_STATS,
                         MSG_UPDATE, MSG_UPDATE_RESULT,
-                        MSG_VIDEO_INFO, MSG_VIEW, PROTOCOL_VERSION, ROLE_AUDIO, ROLE_CONTROL, ROLE_FILE, ROLE_VIDEO, AuthError, ProtocolError,
+                        MSG_VIDEO_INFO, MSG_VIEW, PROTOCOL_VERSION, ROLE_AUDIO, ROLE_CONTROL, ROLE_FILE, ROLE_VIDEO, ROLE_WINAUDIO, AuthError, ProtocolError,
                         pack_echo, pack_frame, pack_frame2, pack_move, pack_update, parse_version,
                         recv_exact, server_handshake, tune_socket, unpack_echo, unpack_move)
 from ..geometry import OPPOSITE
@@ -910,6 +910,89 @@ class AudioSession(threading.Thread):
             srv._on_audio_closed(self)
 
 
+class WinAudioSession(threading.Thread):
+    """The channel Windows opens to send its own sound (3.4, "all sound on the Mac"): played through an AudioQueue."""
+
+    STATS_S = 2.0
+
+    def __init__(self, server: "MirrorwayServer", ch, addr):
+        super().__init__(daemon=True, name="mirrorway-winaudio")
+        self.server, self.ch, self.addr = server, ch, addr
+        self.closed = False
+        self.rx: Optional[AU.Receiver] = None
+        self.source = ""
+
+    def close(self) -> None:
+        self.closed = True
+        self.ch.close()
+
+    def run(self) -> None:
+        srv = self.server
+        rx = None
+        try:
+            if srv.audio_route() != "mac":
+                self.ch.send_json(AU.MSG_AUDIO_INFO, {"error": T("Windows' sound is not set to play on the Mac")})
+                return
+
+            def opened(rate, channels, player):
+                log.info("Playing Windows' sound on the Mac: %d Hz, %d channels (%s)", rate, channels,
+                         getattr(player, "driver", "?"))
+            rx = self.rx = AU.Receiver(srv.winaudio_player_factory, on_open=opened)
+            srv.winaudio_error = ""
+            last_stats = time.monotonic()
+            m = {"t": time.monotonic(), "packets": 0, "bytes": 0}
+            prev = {"underruns": 0, "trims": 0}
+            while not self.closed:
+                mtype, payload = self.ch.recv()
+                if mtype == AU.MSG_AUDIO_INFO:
+                    try:
+                        self.source = str(json.loads(payload.decode("utf-8")).get("source") or "")
+                    except Exception:
+                        pass
+                try:
+                    rx.handle(mtype, payload)
+                except AU.SourceError:
+                    raise
+                except Exception as exc:                # no output device, Core Audio refused…
+                    srv.winaudio_error = str(exc).splitlines()[0]
+                    log.warning("Cannot play Windows' sound: %s", exc)
+                    self.ch.send_json(AU.MSG_AUDIO_INFO, {"error": T("the Mac cannot play sound: {error}").format(
+                        error=srv.winaudio_error)})
+                    return
+                if mtype == AU.MSG_AUDIO:
+                    m["packets"] += 1
+                    m["bytes"] += len(payload) - 4
+                now = time.monotonic()
+                if now - last_stats >= self.STATS_S and rx.policy is not None:
+                    last_stats = now
+                    self.ch.send_json(AU.MSG_AUDIO_STATS, rx.stats())
+                if now - m["t"] >= 60.0:
+                    span = now - m["t"]
+                    pol = rx.policy
+                    if m["packets"]:
+                        st = {"underruns": pol.underruns, "trims": pol.trims} if pol else {}
+                        log.info("Windows' sound (last 1 min): %d packets, %.0f kbit/s, %s; queue %s ms, underruns "
+                                 "%s, trimmed %s", m["packets"], m["bytes"] * 8 / 1000.0 / span,
+                                 rx.meter.describe(), (rx.stats() or {}).get("queue_ms", "?"),
+                                 _per_minute(st, prev, "underruns"), _per_minute(st, prev, "trims"))
+                    else:
+                        log.info("Windows' sound (last 1 min): silent")
+                    m = {"t": now, "packets": 0, "bytes": 0}
+                    rx.meter.reset()
+        except AU.SourceError as exc:
+            srv.winaudio_error = str(exc)
+            log.info("Windows cannot send its sound: %s", exc)
+        except Exception as exc:
+            if not self.closed:
+                log.info("Windows' sound connection closed: %s", exc)
+        finally:
+            if rx is not None:
+                rx.close()
+                log.info("Windows' sound stopped playing on the Mac")
+            self.close()
+            srv._on_winaudio_closed(self)
+
+
 # ---------------------------------------------------------------------------
 def _default_capture_factory(display_index: int, preset: dict):
     from .capture import open_best
@@ -920,6 +1003,11 @@ def _default_capture_factory(display_index: int, preset: dict):
 def _default_audio_capture():
     from .audio import SCKAudioCapture
     return SCKAudioCapture()
+
+
+def _default_winaudio_player(rate: int, channels: int):
+    from .player import AudioQueuePlayer
+    return AudioQueuePlayer(rate, channels)
 
 
 class _MacVolume:
@@ -955,7 +1043,8 @@ class MirrorwayServer:
                  capture_factory: Optional[Callable] = None, beacon: bool = True,
                  h264_encoder_factory: Optional[Callable] = None, network_probe: Optional[Callable] = None,
                  vd_factory: Optional[Callable] = None, files_dir=None,
-                 audio_capture_factory: Optional[Callable] = None, volume=None):
+                 audio_capture_factory: Optional[Callable] = None, volume=None,
+                 winaudio_player_factory: Optional[Callable] = None):
         self.cfg = cfg
         self.platform = platform
         self.router = Router(platform, self, cfg)
@@ -973,6 +1062,9 @@ class MirrorwayServer:
         self.volume = volume or _MacVolume()
         self.audio: Optional[AudioSession] = None
         self.audio_error = ""
+        self.winaudio_player_factory = winaudio_player_factory or _default_winaudio_player
+        self.winaudio: Optional[WinAudioSession] = None     # Windows' sound playing here (3.4)
+        self.winaudio_error = ""
         self._muted_by_us = False
         self.capture_factory = capture_factory or _default_capture_factory
         self.h264_encoder_factory = h264_encoder_factory or _default_h264_factory
@@ -1449,7 +1541,8 @@ class MirrorwayServer:
                 if role == ROLE_PAIR:
                     self._handle_pairing(conn, addr)
                     return
-                if role not in (ROLE_CONTROL, ROLE_VIDEO, ROLE_FILE, ROLE_AUDIO, ROLE_SECURE) or self.identity is None:
+                if role not in (ROLE_CONTROL, ROLE_VIDEO, ROLE_FILE, ROLE_AUDIO, ROLE_WINAUDIO,
+                                ROLE_SECURE) or self.identity is None:
                     raise ProtocolError("invalid role or no Mac identity")
                 ch, hello, pub = server_accept(conn, self.identity, role, self.is_known)
                 device = self.device_by_pub(pub)
@@ -1481,7 +1574,7 @@ class MirrorwayServer:
                 "name": machine_name(), "version": __version__, "protocol": PROTOCOL_VERSION,
                 "side": self.cfg.get("side"), "screen_share": bool(self.cfg.get("screen_share")),
                 "features": ["devkeys", "pair", RC.FEATURE, EXTEND_FEATURE, FX.FEATURE, FX.FEATURE_PACK, AU.FEATURE,
-                             ACTIONS_FEATURE, LOCK_FEATURE],
+                             ACTIONS_FEATURE, LOCK_FEATURE, AU.WINAUDIO_FEATURE],
                 "id": self.identity.fingerprint if self.identity else "",
             })
         except Exception:
@@ -1507,6 +1600,20 @@ class MirrorwayServer:
             sess.start()
             log.info("Windows lock screen helper connected: %s (%s), version %s", sess.name, addr[0],
                      sess.client_version)
+            self._notify()
+            return
+        if ch.role == ROLE_WINAUDIO:
+            if device is None:
+                ch.close()
+                return
+            wsess = WinAudioSession(self, ch, addr)
+            with self._lock:
+                old, self.winaudio = self.winaudio, wsess
+            if old is not None:
+                old.close()
+                if old.is_alive():
+                    old.join(3.0)
+            wsess.start()
             self._notify()
             return
         if ch.role == ROLE_AUDIO:
@@ -1799,17 +1906,60 @@ class MirrorwayServer:
     def audio_enabled(self) -> bool:
         return bool(self.cfg.get("audio"))
 
+    def audio_route(self) -> str:
+        """Where sound plays (3.4): "windows" (the Mac's sound on Windows), "mac" (Windows' sound on the Mac) or
+        "own" (each computer on its own speakers). The settings keep it as two switches that are never both on."""
+        if self.cfg.get("audio"):
+            return "windows"
+        return "mac" if self.cfg.get("audio_from_windows") else "own"
+
+    def set_audio_route(self, route: str, source: str = "") -> bool:
+        """Changes where sound plays and tells Windows. False if route is unknown."""
+        if route not in AU.ROUTES:
+            return False
+        before = self.audio_route()
+        self.cfg.set("audio", route == "windows")
+        self.cfg.set("audio_from_windows", route == "mac")
+        if route != "own":
+            self.cfg.set("audio_route_last", route)
+        if route != before:
+            log.info("Sound now plays %s%s", {"own": "on each computer's own speakers", "windows": "on Windows",
+                                              "mac": "on the Mac"}[route], f" (changed {source})" if source else "")
+        threading.Thread(target=self.send_audio_state, daemon=True, name="mirrorway-audio-state").start()
+        return True
+
+    def toggle_audio(self, source: str = "") -> str:
+        """The quick toggle (panel tile, shortcut): sharing off <-> the last direction used (Windows by default)."""
+        if self.audio_route() != "own":
+            route = "own"
+        else:
+            route = self.cfg.get("audio_route_last") if self.cfg.get("audio_route_last") in ("windows", "mac") \
+                else "windows"
+        self.set_audio_route(route, source)
+        return route
+
+    def winaudio_supported(self) -> bool:
+        """Windows can send its sound (Mirrorway 3.4 or later on Windows)."""
+        return self.supports(AU.WINAUDIO_FEATURE)
+
     def send_audio_state(self) -> None:
-        """Tell Windows to open or close the audio channel (on connect and when the menu changes)."""
-        if not self.audio_enabled():
+        """Tell Windows which audio channel to open or close (on connect and when the setting changes)."""
+        route = self.audio_route()
+        if route != "windows":
             a = self.audio
             if a is not None:
                 a.close()
-        if self.supports(AU.FEATURE):
+        if route != "mac":
+            w = self.winaudio
+            if w is not None:
+                w.close()
+        if self.supports(AU.FEATURE) or self.winaudio_supported():
             try:
-                self.send_json(AU.MSG_AUDIO_STATE, {"on": self.audio_enabled()})
+                self.send_json(AU.MSG_AUDIO_STATE, {"on": route == "windows", "route": route,
+                                                    "capture": route == "mac"})
             except Exception:
                 pass
+        self._notify()
 
     def _audio_started(self) -> None:
         if not self.cfg.get("audio_mute_mac", True) or self._muted_by_us:
@@ -1854,6 +2004,12 @@ class MirrorwayServer:
                 self.audio = None
         self._notify()
 
+    def _on_winaudio_closed(self, sess: "WinAudioSession") -> None:
+        with self._lock:
+            if self.winaudio is sess:
+                self.winaudio = None
+        self._notify()
+
     def restore_volume_after_crash(self) -> None:
         if self.cfg.get("audio_muted_by_app"):
             self.volume.set(False)
@@ -1861,12 +2017,18 @@ class MirrorwayServer:
             log.info("The Mac's sound was unmuted (Mirrorway had muted it during its previous run)")
 
     def action_from_windows(self, req: dict) -> None:
-        """The Windows panel changed a setting that lives on the Mac (only the audio transfer for now)."""
-        if isinstance(req, dict) and isinstance(req.get("audio"), bool):
+        """The Windows panel changed a setting that lives on the Mac (where sound plays, for now)."""
+        if not isinstance(req, dict):
+            return
+        if req.get("audio_route") in AU.ROUTES:                     # 3.4: the Windows settings' choice
+            self.set_audio_route(req["audio_route"], "from Windows")
+            return
+        if req.get("audio_toggle"):                                 # 3.4: the Windows panel's tile
+            self.toggle_audio("from Windows")
+            return
+        if isinstance(req.get("audio"), bool):                     # Windows 3.1.2–3.3: the Mac's sound on or off
             if bool(self.cfg.get("audio")) != req["audio"]:
-                log.info("Audio transfer turned %s from Windows", "on" if req["audio"] else "off")
-                self.cfg.set("audio", req["audio"])
-                threading.Thread(target=self.send_audio_state, daemon=True, name="mirrorway-audio-state").start()
+                self.set_audio_route("windows" if req["audio"] else "own", "from Windows")
             else:
                 self.send_audio_state()          # tell Windows the current state anyway
 
@@ -1998,7 +2160,10 @@ class MirrorwayServer:
             "extend": self.extend.status(),
             "files": self._files_status(),
             "audio": {"enabled": self.audio_enabled(), "active": self.audio is not None and not self.audio.closed,
-                      "error": self.audio_error, "supported": self.supports(AU.FEATURE)},
+                      "error": self.audio_error, "supported": self.supports(AU.FEATURE),
+                      "route": self.audio_route(),
+                      "from_windows": self.winaudio is not None and not self.winaudio.closed,
+                      "from_windows_error": self.winaudio_error, "from_windows_supported": self.winaudio_supported()},
             "extend_supported": self.extend.supported(),
         }
 

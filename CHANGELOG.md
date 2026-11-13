@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.4.0 — Windows's sound on the Mac; one choice for where sound plays
+- **Where sound plays** is now one choice on the Mac (Mirrorway › Audio, Settings › Audio) and on Windows
+  (Settings › Audio): **each on its own** (the default), **all on Windows** (the Mac's sound on Windows, as before)
+  or **all on the Mac** (new). The Audio tile in both panels and ⌃⌥A switch between *each on its own* and the
+  direction used last.
+- **All on the Mac:** Windows's sound plays through the Mac's current output, for example in headphones connected
+  to the MacBook. Windows captures every program except Mirrorway with WASAPI process loopback (Windows 11; Windows
+  10 build 20348 and later) and mutes its own speakers meanwhile (unmuted afterwards, also after a crash). Older
+  Windows 10 captures what the speakers play and leaves them on. The Mac plays it through an AudioQueue with the
+  same short buffering as Windows uses for the Mac's sound; during silence nothing is sent and the Mac's output is
+  paused. Both computers need 3.4.
+- Settings changed: the Mac's "Play the Mac's sound on Windows" switch became the choice above (an existing setting
+  carries over as "all on Windows"). An older Windows can still turn the Mac's sound on and off.
+- CI: a new job installs a virtual sound card on a Windows runner and checks the capture (another program's tone is
+  captured, Mirrorway's own is not, still captured with the speakers muted), the speakers' mute and the whole path
+  through Mirrorway; the macOS job plays sound through the AudioQueue.
+
 ## 3.3.0 — the Mac's keyboard on Windows' lock screen, Ctrl+Alt+Del and UAC prompts
 - **Lock screen support** (Windows Settings › General › Lock screen › Install…, one administrator prompt): type
   your Windows password on the lock screen and the sign-in screen after a restart with the Mac's keyboard, answer

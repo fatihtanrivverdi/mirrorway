@@ -172,15 +172,34 @@ Files and folders copied in Finder with ⌘C can be pasted in Explorer with Ctrl
 - The limits are 4 GB and 100,000 items (the size limit is the `file_clipboard_max_mb` setting on the Mac). A notification tells you when a copy could not be sent. Copying something new while a transfer is running abandons the old transfer.
 - Turn it off with **Mirrorway › File Copy and Paste**; while it is off only the names of copied files go across, as text.
 
-### Audio (the Mac's sound on Windows)
+### Audio: where sound plays
 
-With **Mirrorway › Audio › Play the Mac's Sound on Windows**, everything that plays on the Mac (music, video, notification sounds) plays through Windows's default audio output. Mirrorway's own sounds are left out.
+One choice decides it, on the Mac in **Mirrorway › Audio** or **Settings › Audio › Where sound plays**, and on Windows in **Settings › Audio**:
+
+- **Each on its own** (the default): each computer plays its own sound on its own speakers.
+- **All on Windows:** the Mac's sound plays on Windows too, so everything is heard from Windows's speakers (below).
+- **All on the Mac** (3.4, both computers need Mirrorway 3.4): Windows's sound plays on the Mac, so everything is heard from the Mac, for example in headphones connected to the MacBook (further below).
+
+The **Audio** tile in the panels and **`⌃⌥A`** switch between *each on its own* and the direction used last (*all on Windows* the first time).
+
+#### All on Windows (the Mac's sound on Windows)
+
+Everything that plays on the Mac (music, video, notification sounds) plays through Windows's default audio output. Mirrorway's own sounds are left out.
 
 - The sound is captured the same way as the screen (ScreenCaptureKit); no extra permission is needed beyond **Screen Recording**. macOS 13 or later is required.
 - It travels uncompressed as 48 kHz stereo (≈1.5 Mbit/s), which a home network handles easily. The delay is ≈60–100 ms. If the network stalls and sound piles up, the oldest is dropped so the sound never lags behind.
 - **Mute the Mac's Speakers Meanwhile** (on by default): while the sound plays on Windows, the Mac's own output is muted, and unmuted when the transfer ends (when the connection drops or you turn it off). Even if Mirrorway crashes, it is unmuted on the next start. A Mac that was already muted is left alone.
 - **Only some apps:** in Settings › Audio, **Send the sound of › Only the apps below** and switch on the apps (for example Spotify or a browser); the others are not sent. Apps that start later are picked up within a few seconds. With **Mute the Mac's speakers** on, the other apps are silent on the Mac too; turn it off to hear them on the Mac (the chosen apps then play on both computers).
 - The **Status** line shows whether the transfer is working, or why not. The Mac log gets one line a minute: packets, the level while sound played and how much of the minute had sound, the loudest moment, Windows's queue, and the dropouts and trims of that minute.
+
+#### All on the Mac (Windows's sound on the Mac)
+
+Everything that plays on Windows plays through the Mac's current output (speakers, headphones, AirPods). Mirrorway's own sounds are left out.
+
+- Windows captures its sound with WASAPI *process loopback* (Windows 11, or Windows 10 build 20348 and later): the sound of every program except Mirrorway, before Windows mixes it for the speakers. Windows's speakers are therefore **muted while the sound plays on the Mac** and unmuted when it stops (when you change the choice or the connection drops; also after a crash, on the next start). Speakers that were already muted are left alone.
+- On older Windows 10 it captures what the default speakers play instead; the speakers then stay on (muting them would silence the capture too).
+- It travels uncompressed as 48 kHz stereo, like the other direction, and the Mac buffers the same ≈40 ms before playing, so the delay should be about the same as the other direction. During silence nothing is sent and the Mac's audio output is paused.
+- The Status line on both computers shows whether it is working. Both logs get one line a minute (packets, level, the Mac's queue and dropouts).
 
 ### Windows's lock screen, Ctrl+Alt+Del and UAC prompts (lock screen support)
 
@@ -263,7 +282,7 @@ When something goes wrong, **Mirrorway › Create Diagnostics Bundle** (also in 
 
 - Without lock screen support (see above), Windows's lock screen, Ctrl+Alt+Del and UAC prompts take only the PC's own keyboard and mouse: they run on a secure desktop normal programs cannot type on.
 - Files move by copy and paste; there is no drag and drop between the computers.
-- Sound only goes from the Mac to Windows; Windows's sound and microphones are not transferred.
+- Sound goes one way at a time (all on Windows or all on the Mac); microphones are not transferred.
 - Screen sharing is view only: Windows does not control the Mac (you already use the Mac's keyboard and mouse).
 - The second screen is a video stream: its content reaches Windows with the same delay as the mirrored screen (≈15–20 ms).
 - Both computers must be on the same local network.

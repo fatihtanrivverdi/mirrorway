@@ -1,11 +1,18 @@
-"""Audio streaming (Mac -> Windows), the platform-independent part.
+"""Audio streaming, the platform-independent part.
 
-Sound playing on the Mac is captured with ScreenCaptureKit (the Screen Recording permission is enough) and sent to
-Windows as 48 kHz stereo 16-bit PCM over a separate encrypted connection (ROLE_AUDIO); Windows plays it through
-SDL2's audio queue. 1.5 Mbit/s of uncompressed audio is no problem on a home network, and there is no codec delay.
+Where sound plays is one choice on the Mac (ROUTES, 3.4): each computer on its own speakers, all on Windows, or all
+on the Mac.
+  - All on Windows: sound playing on the Mac is captured with ScreenCaptureKit (the Screen Recording permission is
+    enough) and sent to Windows over a separate encrypted connection (ROLE_AUDIO); Windows plays it through SDL2's
+    audio queue.
+  - All on the Mac (3.4): Windows captures its own sound with WASAPI (process loopback: every app except
+    Mirrorway) and sends it to the Mac over ROLE_WINAUDIO; the Mac plays it through an AudioQueue.
+Both directions send 48 kHz stereo 16-bit PCM: 1.5 Mbit/s of uncompressed audio is no problem on a home network,
+and there is no codec delay. The receiving side is the same code (Receiver).
 
-Latency: Windows starts playing after PREBUFFER_MS have arrived; if the queue grows past LIMIT_MS (audio that piled
-up while the network stalled), it is cleared and playback continues from the newest packet, so sound never lags.
+Latency: the receiver starts playing after PREBUFFER_MS have arrived; if the queue grows past LIMIT_MS (audio that
+piled up while the network stalled), it is cleared and playback continues from the newest packet, so sound never
+lags.
 """
 from __future__ import annotations
 
@@ -14,17 +21,20 @@ import struct
 from typing import Optional
 
 FEATURE = "audio"
+WINAUDIO_FEATURE = "winaudio"   # 3.4: Windows can send its sound (Windows' hello) / the Mac can play it (the Mac's)
+ROUTES = ("own", "windows", "mac")   # where sound plays: each computer on its own, all on Windows, all on the Mac
 RATE, CHANNELS, SAMPLE_BYTES = 48000, 2, 2
 FORMAT = "s16le"
 PREBUFFER_MS = 40          # audio collected before playback starts
 LIMIT_MS = 180             # older audio is dropped when the queue grows past this
 
-# messages
-MSG_AUDIO_STATE = 33       # control channel s->c JSON {"on": bool}
-MSG_AUDIO_INFO = 50        # audio channel s->c JSON {"rate", "channels", "format"} or {"error"}
-MSG_AUDIO = 51             # audio channel s->c >I sequence + PCM (s16le, interleaved)
-MSG_AUDIO_STATS = 52       # audio channel c->s JSON (queue, underruns)
-MSG_AUDIO_IDLE = 53        # audio channel s->c empty: no sound on the Mac (ScreenCaptureKit may send nothing in silence)
+# messages (on ROLE_AUDIO the Mac sends and Windows plays; on ROLE_WINAUDIO the other way round)
+MSG_AUDIO_STATE = 33       # control channel s->c JSON {"on": bool (play the Mac's sound), "route": ROUTES (3.4),
+                           #   "capture": bool (3.4: send Windows' sound to the Mac)}
+MSG_AUDIO_INFO = 50        # audio channel sender->player JSON {"rate", "channels", "format"} or {"error"}
+MSG_AUDIO = 51             # audio channel sender->player >I sequence + PCM (s16le, interleaved)
+MSG_AUDIO_STATS = 52       # audio channel player->sender JSON (queue, underruns)
+MSG_AUDIO_IDLE = 53        # audio channel sender->player empty: silence (the capture may send nothing in silence)
 IDLE_EVERY_S = 2.0         # MSG_AUDIO_IDLE interval during silence (keeps the connection alive)
 
 _SEQ = struct.Struct(">I")
@@ -173,3 +183,89 @@ def describe_level(db: Optional[float]) -> str:
     if db is None:
         return "?"
     return "silent" if db <= -90 else f"{db:.0f} dBFS"
+
+
+class SourceError(RuntimeError):
+    """The sending side cannot provide sound (off, no permission…): retrying is pointless until it is turned on again."""
+
+
+class Receiver:
+    """Plays an incoming audio stream (MSG_AUDIO_INFO / MSG_AUDIO / MSG_AUDIO_IDLE) through a queue-based player
+    with QueuePolicy. Windows uses it for the Mac's sound, the Mac for Windows' sound (3.4).
+    player_factory(rate, channels) -> an object with queued(), queue(pcm), clear(), play(on), close()."""
+
+    def __init__(self, player_factory, on_open: Optional[callable] = None):
+        self.player_factory = player_factory
+        self.on_open = on_open                  # called with (rate, channels, player) when a device opens
+        self.player = None
+        self.policy: Optional[QueuePolicy] = None
+        self.fmt = None
+        self.packets = 0
+        self.bytes = 0
+        self.idles = 0
+        self.meter = LevelMeter()
+        self._qsum = 0
+        self._qn = 0
+
+    def handle(self, mtype: int, payload: bytes) -> bool:
+        """One message from the sender. True if it was an audio message. Raises SourceError for an error report."""
+        if mtype == MSG_AUDIO_INFO:
+            import json
+            info = json.loads(payload.decode("utf-8"))
+            if info.get("error"):
+                raise SourceError(str(info["error"]))
+            new = (int(info.get("rate") or RATE), int(info.get("channels") or CHANNELS))
+            if new != self.fmt:
+                self.close()
+                self.player = self.player_factory(*new)
+                self.policy = QueuePolicy(*new)
+                self.fmt = new
+                if self.on_open is not None:
+                    self.on_open(new[0], new[1], self.player)
+            return True
+        if mtype == MSG_AUDIO_IDLE:
+            self.idles += 1
+            pl = self.player
+            if pl is not None and self.policy is not None and pl.queued() == 0:
+                self.policy.idle()              # the sender is silent: not an underrun; collect again when sound returns
+                pl.play(False)
+            return True
+        if mtype == MSG_AUDIO:
+            pl = self.player
+            if pl is None:
+                return True
+            _seq, pcm = unpack_audio(payload)
+            queued = pl.queued()
+            act = self.policy.on_packet(queued, len(pcm))
+            if act == "trim":
+                pl.clear()
+            elif act == "rebuffer":
+                pl.play(False)
+            pl.queue(pcm)
+            if act in ("start", "trim"):
+                pl.play(True)
+            self.packets += 1
+            self.bytes += len(pcm)
+            self.meter.add(pcm)
+            self._qsum += queued
+            self._qn += 1
+            return True
+        return False
+
+    def stats(self) -> dict:
+        """For MSG_AUDIO_STATS: the average queue since the last call, underruns and trims so far."""
+        if self.policy is None:
+            return {}
+        out = {"queue_ms": round(self.policy.ms(self._qsum / self._qn), 1) if self._qn else 0.0,
+               "underruns": self.policy.underruns, "trims": self.policy.trims}
+        self._qsum = self._qn = 0
+        return out
+
+    def close(self) -> None:
+        pl, self.player = self.player, None
+        self.fmt = None
+        if pl is not None:
+            try:
+                pl.close()
+            except Exception:
+                pass

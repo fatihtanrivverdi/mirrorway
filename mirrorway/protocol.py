@@ -33,6 +33,7 @@ MAGIC = b"MRWAY1"
 ROLE_CONTROL = b"C"
 ROLE_VIDEO = b"V"
 ROLE_AUDIO = b"A"          # audio (Mac -> Windows; mirrorway.audio)
+ROLE_WINAUDIO = b"W"       # audio (Windows -> Mac, 3.4; device keys only; mirrorway.audio)
 ROLE_FILE = b"F"           # file copy and paste (device keys only; mirrorway.filexfer)
 ROLE_SECURE = b"S"         # Windows' lock screen helper (a SYSTEM process; device keys only; mirrorway.win.secure_helper)
 NONCE_LEN = 16

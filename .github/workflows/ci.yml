@@ -154,13 +154,42 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # Windows' sound to the Mac (3.4) needs a sound card, which the runners lack: a virtual one (VB-CABLE, installed by
+  # LABSN/sound-ci-helpers, pinned by commit) in a job of its own, so the driver never shares a machine with the
+  # release builds. WASAPI process loopback, the speakers' mute and the whole path through Mirrorway are tried.
+  windows-sound:
+    name: Windows sound (real platform)
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.platforms) || startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Dependencies (the same pinned file as the Windows app)
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-windows.txt -r requirements-dev.txt
+      - name: Virtual sound card (VB-CABLE)
+        uses: LABSN/sound-ci-helpers@e9d6ba52163a3283714a68412036ddf33f78d49c # main, 2026-07-27
+      - name: Windows Audio service
+        run: |
+          Set-Service -Name Audiosrv -StartupType Automatic
+          Start-Service -Name Audiosrv
+          Get-Service -Name Audiosrv, AudioEndpointBuilder | Format-Table -AutoSize
+          Get-CimInstance Win32_SoundDevice | Format-Table -AutoSize Name, Status
+      - name: Windows' sound to the Mac (WASAPI loopback, speakers' mute, end to end)
+        run: python tests/ci_run.py "Windows sound test" python tests/ci_audio_windows.py
+
   # On a release tag (v*), after all the tests pass: the update package is built, signed with Ed25519 using the
   # secret key in CI (MIRRORWAY_SIGNING_KEY) and published on GitHub Releases together with the download packages
   # built by the macOS job and the Windows installer built by the Windows job. Mirrorway on the Mac only installs packages verified with the public key embedded in
   # its code. The signing key is given only to the signing step; the upload step sees only GITHUB_TOKEN.
   release:
     name: Release (signed package)
-    needs: [linux, macos, windows]
+    needs: [linux, macos, windows, windows-sound]
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -195,7 +224,7 @@ jobs:
   # no outside actions; it only downloads the logs from the GitHub API and pushes them to that branch with git.
   report:
     name: Logs (ci-logs branch)
-    needs: [linux, macos, windows, release]
+    needs: [linux, macos, windows, windows-sound, release]
     # on every failed run; on release tags and manual runs also for the output of the real-platform runs
     if: ${{ failure() || (always() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')) }}
     runs-on: ubuntu-24.04

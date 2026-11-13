@@ -46,7 +46,9 @@ MAC_DEFAULTS = {
     "gestures": True,           # while Windows is controlled, trackpad gestures become their Windows equivalents
     "file_clipboard": True,     # copied files and folders are transferred and put on the other clipboard
     "file_clipboard_max_mb": 4096,
-    "audio": False,             # play the Mac's sound on Windows
+    "audio": False,             # play the Mac's sound on Windows ("all sound on Windows")
+    "audio_from_windows": False,  # 3.4: play Windows' sound on the Mac ("all sound on the Mac"; never both on)
+    "audio_route_last": "windows",  # the direction the quick toggle turns on ("windows" or "mac")
     "audio_mute_mac": True,     # mute the Mac's speakers while its sound plays on Windows (restored afterwards)
     "audio_muted_by_app": False,
     "audio_apps_mode": "all",   # whose sound goes to Windows: "all" apps, or only the "selected" ones
@@ -77,6 +79,7 @@ WIN_DEFAULTS = {
     "file_clipboard": True,     # copied files go to the Mac and back (the Files tile)
     "quick_panel": True,        # clicking the tray icon opens the panel (False: the screen window, as before 3.1.2)
     "switch_ring": True,        # a ring where the Mac's pointer arrives, for half a second
+    "audio_muted_by_app": False,  # 3.4: Mirrorway muted the speakers while Windows' sound played on the Mac
     "shortcuts": {"screen": "s"},   # Control + Alt + letter: show or hide the Mac's screen
 }
 

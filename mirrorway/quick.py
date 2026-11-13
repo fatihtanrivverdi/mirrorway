@@ -170,20 +170,32 @@ def _second_tile(st: dict, connected: bool, letter: str) -> Tile:
 
 
 def _audio_tile(st: dict, connected: bool, letter: str) -> Tile:
+    """Where sound plays (3.4): off = each computer on its own; on = all on Windows or all on the Mac."""
     a = st.get("audio") or {}
-    on = bool(a.get("enabled"))
-    if not on:
-        detail = T("On the Mac")
-    elif a.get("error"):
-        detail = T("Needs attention")
-    elif a.get("active"):
-        detail = T("On Windows")
-    elif connected and not a.get("supported"):
-        detail = T("Update needed")
+    route = a.get("route") or ("windows" if a.get("enabled") else "own")
+    on = route != "own"
+    if route == "own":
+        detail = T("Each on its own")
     elif not connected:
         detail = T("Waiting")
+    elif route == "windows":
+        if a.get("error"):
+            detail = T("Needs attention")
+        elif a.get("active"):
+            detail = T("All on Windows")
+        elif not a.get("supported"):
+            detail = T("Update needed")
+        else:
+            detail = T("Starting…")
     else:
-        detail = T("Starting…")
+        if a.get("from_windows_error"):
+            detail = T("Needs attention")
+        elif a.get("from_windows"):
+            detail = T("All on the Mac")
+        elif not a.get("from_windows_supported"):
+            detail = T("Update needed")
+        else:
+            detail = T("Starting…")
     return Tile("audio", T("Audio"), detail, on, True, mac_shortcut(letter))
 
 
@@ -283,11 +295,13 @@ def _win_hint(side: str, remote: bool) -> str:
 def win_panel(*, state: str, status_text: str, cfg, mac_name: str = "", remote: bool = False,
               viewer: bool = False, side: str = "right", rtt_ms: Optional[float] = None, fps: float = 0.0,
               audio_supported: bool = False, audio_on: bool = False, reconnecting: bool = False,
-              version: str = __version__) -> Panel:
+              audio_route: str = "", sending_audio: bool = False, version: str = __version__) -> Panel:
     """The Windows tray panel.
 
     state: the connection state of the Windows app (connected, idle, error, auth, unpaired, ...)
     viewer: the screen window is open; audio_on: the Mac's sound plays here
+    audio_route: where the Mac says sound plays (3.4: "own", "windows", "mac"; "" with an older Mac);
+    sending_audio: this PC's sound is being sent to the Mac
     """
     connected = state == "connected"
     side = side if side in ARROWS else "right"
@@ -316,15 +330,29 @@ def win_panel(*, state: str, status_text: str, cfg, mac_name: str = "", remote: 
                       win_shortcut(letter), connected or viewer)
     clip_on = bool(cfg.get("clipboard"))
     files_on = bool(cfg.get("file_clipboard", True))
-    if not connected:
-        sound = T("Off")
-    elif not audio_supported:
-        sound = T("Update needed")
+    if audio_route:                                     # 3.4: one tile for where sound plays
+        sound_title = T("Sound")
+        sound_on = audio_route in ("windows", "mac")
+        if not connected:
+            sound = T("Off")
+        elif audio_route == "windows":
+            sound = T("All on this PC")
+        elif audio_route == "mac":
+            sound = T("All on the Mac")
+        else:
+            sound = T("Each on its own")
     else:
-        sound = T("On") if audio_on else T("Off")
+        sound_title = T("Mac's sound")
+        sound_on = audio_on
+        if not connected:
+            sound = T("Off")
+        elif not audio_supported:
+            sound = T("Update needed")
+        else:
+            sound = T("On") if audio_on else T("Off")
     tiles = [
         Tile("clipboard", T("Clipboard"), T("On") if clip_on else T("Off"), clip_on, True),
-        Tile("audio", T("Mac's sound"), sound, audio_on, connected and audio_supported),
+        Tile("audio", sound_title, sound, sound_on and connected, connected and audio_supported),
         Tile("files", T("Files"), T("On") if files_on else T("Off"), files_on, True),
         Tile("reconnect", T("Reconnect"), T("Connecting…") if reconnecting else "", reconnecting, not reconnecting),
         Tile("pair", T("Pair a Mac"), "", False, True),

@@ -282,8 +282,16 @@ def test_mac_app_quick_actions():
         assert p.models[-1].tile('clipboard').on == (not clip)
         a.panel_action('tile:files')
         assert cfg.get('file_clipboard') is False and a.mi_files.state == 0
-        a.quick_action('audio')                         # Control + Option + A
-        assert cfg.get('audio') is True and a.mi_audio.state == 1
+        a.quick_action('audio')                         # Control + Option + A: all sound on Windows (the default)
+        assert cfg.get('audio') is True and a.route_items['windows'].state == 1
+        assert a.route_items['own'].state == 0
+        a.route_items['mac'].callback(a.route_items['mac'])      # the menu: all sound on the Mac
+        assert cfg.get('audio') is False and cfg.get('audio_from_windows') is True
+        assert [a.route_items[r].state for r in ('own', 'windows', 'mac')] == [0, 0, 1]
+        a.quick_action('audio')                         # off: each computer on its own
+        assert not cfg.get('audio') and not cfg.get('audio_from_windows') and a.route_items['own'].state == 1
+        a.quick_action('audio')                         # back on in the last direction: the Mac
+        assert cfg.get('audio_from_windows') is True and a.route_items['mac'].state == 1
         # screen and second screen need Windows; nothing happens while it is not connected
         sent = []
         a.server.request_viewer = lambda show=True: sent.append(show)

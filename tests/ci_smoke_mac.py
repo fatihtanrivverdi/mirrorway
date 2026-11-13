@@ -519,6 +519,78 @@ def lock_watch():
     return how
 
 
+def _tone_pcm(ms, freq=440.0):
+    import numpy as np
+    n = 48000 * ms // 1000
+    s = (np.sin(2 * np.pi * freq * np.arange(n) / 48000) * 12000).astype("<i2")
+    return np.repeat(s[:, None], 2, axis=1).tobytes()
+
+
+def winaudio_player():
+    """Windows' sound on the Mac (3.4): an AudioQueue plays 16-bit PCM through the Mac's output; 600 ms of sound
+    drain from the queue in about real time."""
+    import time
+    from mirrorway.mac.player import AudioQueuePlayer
+    pl = AudioQueuePlayer()
+    try:
+        pl.queue(_tone_pcm(600))
+        t0 = time.monotonic()
+        pl.play(True)
+        while pl.queued() and time.monotonic() - t0 < 3:
+            time.sleep(0.01)
+        drained = time.monotonic() - t0
+        assert pl.queued() == 0, f"{pl.queued()} bytes still queued after {drained:.1f} s"
+        assert 0.4 < drained < 1.5, f"600 ms drained in {drained:.2f} s"
+        pl.play(False)
+        pl.play(True)                                   # paused while Windows is silent, then on again
+        pl.queue(_tone_pcm(100))
+        time.sleep(0.3)
+        assert pl.queued() == 0
+        return (f"600 ms drained in {drained * 1000:.0f} ms, {pl.callbacks} callbacks of {pl.buffer_bytes} bytes, "
+                f"underruns {pl.ring.underruns}")
+    finally:
+        pl.close()
+
+
+def winaudio_heard():
+    """The AudioQueue's sound really reaches the output: another process plays a tone with it, ScreenCaptureKit
+    (every app) hears it. Only reported, like the captures above."""
+    import subprocess
+    import time
+    from mirrorway import audio as A
+    from mirrorway.mac.audio import SCKAudioCapture
+    child = ("import sys, time; sys.path.insert(0, sys.argv[1]); sys.path.insert(0, sys.argv[2]);"
+             "from ci_smoke_mac_tone import play; play()")
+    tone_mod = os.path.join(tempfile.mkdtemp(prefix="mirrorway-ci-aq-"), "ci_smoke_mac_tone.py")
+    with open(tone_mod, "w") as f:
+        f.write("import time\n"
+                "import numpy as np\n"
+                "from mirrorway.mac.player import AudioQueuePlayer\n"
+                "def play():\n"
+                "    n = 48000 * 3\n"
+                "    s = (np.sin(2 * np.pi * 440 * np.arange(n) / 48000) * 12000).astype('<i2')\n"
+                "    pl = AudioQueuePlayer()\n"
+                "    pl.queue(np.repeat(s[:, None], 2, axis=1).tobytes())\n"
+                "    pl.play(True)\n"
+                "    time.sleep(3.2)\n"
+                "    pl.close()\n")
+    got = []
+    cap = SCKAudioCapture()
+    cap.start(lambda pcm, rate, ch: got.append(pcm))
+    proc = subprocess.Popen([sys.executable, "-c", child, os.path.dirname(HERE), os.path.dirname(tone_mod)])
+    try:
+        time.sleep(0.8)
+        got.clear()
+        time.sleep(1.5)
+    finally:
+        proc.wait(10)
+        cap.stop()
+    meter = A.LevelMeter()
+    for p in got:
+        meter.add(p)
+    return f"child exit {proc.returncode}; captured {len(got)} buffers, {meter.describe()}"
+
+
 check("VideoToolbox H.264 encoding + decoding", videotoolbox)
 check("Lock follow and lock (login framework)", lock_watch)
 check("Switch ring (AppKit, Core Animation)", switch_ring)
@@ -532,6 +604,7 @@ check("Rich clipboard (NSPasteboard)", clipboard)
 check("Trackpad gesture events", gesture_events)
 check("File clipboard (NSPasteboard file URLs)", file_clipboard)
 check("Audio transfer parts", audio_parts)
+check("Windows' sound on the Mac (AudioQueue)", winaudio_player)
 try:
     print(f"[INFO] Audio capture (ScreenCaptureKit): {audio_capture()}")
 except Exception as exc:  # noqa: BLE001  (CI may have no Screen Recording permission; tried on a real Mac)
@@ -540,6 +613,10 @@ try:
     print(f"[INFO] Audio from chosen apps (ScreenCaptureKit filter): {audio_chosen_apps()}")
 except Exception as exc:  # noqa: BLE001
     print(f"[WARN] Could not try audio from chosen apps: {type(exc).__name__}: {str(exc).splitlines()[0][:160]}")
+try:
+    print(f"[INFO] Windows' sound reaches the Mac's output (AudioQueue, heard by ScreenCaptureKit): {winaudio_heard()}")
+except Exception as exc:  # noqa: BLE001
+    print(f"[WARN] Could not try hearing the AudioQueue: {type(exc).__name__}: {str(exc).splitlines()[0][:160]}")
 try:
     import subprocess
     from mirrorway.mac.notify import OSASCRIPT, script
